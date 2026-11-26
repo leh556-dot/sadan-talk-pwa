@@ -46,6 +46,15 @@
       sources: [{ sheet: 'a', tabs: [AI_CHAT_TAB] }],
       // 이 방에 들어가면 전송 대상이 자동으로 A시트 ai채팅 탭이 된다.
       target: { sheet: 'a', tab: AI_CHAT_TAB }
+    },
+    {
+      id: 'office', name: '사단 오피스', emoji: '🏢', color: '#F59E0B',
+      desc: '사장방 · 팀장석 · A·B 전 대원 근무 현황',
+      kind: 'office',
+      sources: [
+        { sheet: 'b', tabs: B_TABS },
+        { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
+      ]
     }
   ];
 
@@ -518,12 +527,15 @@
       const body = el('div', 'room-body');
       const top = el('div', 'room-top');
       top.appendChild(el('span', 'room-name', room.name));
-      top.appendChild(el('span', 'room-count', `${msgs.length}건`));
+      const ofc = room.kind === 'office' ? officeSnapshot(msgs) : null;
+      top.appendChild(el('span', 'room-count', ofc ? ofc.counts.total + '명' : `${msgs.length}건`));
       top.appendChild(el('span', 'room-time', last ? fmtRoomTime(last.ts) : ''));
       body.appendChild(top);
 
       const prev = el('div', 'room-preview');
-      if (last) {
+      if (ofc) {
+        prev.appendChild(el('span', '', '열일 ' + ofc.counts.working + ' · 활동 ' + ofc.counts.active + ' · 대기 ' + ofc.counts.idle));
+      } else if (last) {
         const tag = el('span', 'room-tabtag', (room.id === 'all' ? SHEETS[last.sheet].short + '·' : '') + last.tab);
         prev.appendChild(tag);
         prev.appendChild(el('span', '', last.title || last.body.slice(0, 40)));
@@ -550,20 +562,22 @@
 
   /* ───────── 렌더: 채팅 ───────── */
   function openRoom(id) {
+    const room = roomById(id);
     state.roomId = id;
-    applyRoomTarget(roomById(id));
+    applyRoomTarget(room);
     state.tabFilter = null;
     state.query = '';
     state.searchOpen = false;
     $('#searchBar').hidden = true;
     $('#msgSearch').value = '';
-    state.view = 'chat';
-    $('#app').dataset.view = 'chat';
+    state.view = room.kind === 'office' ? 'office' : 'chat';
+    $('#app').dataset.view = state.view;
     renderRooms();
     renderChatHead();
-    renderMessages();
+    if (state.view === 'office') renderOffice();
+    else renderMessages();
     markSeen(id);
-    scrollToBottom(true);
+    if (state.view !== 'office') scrollToBottom(true);
     if (api.isLive()) refresh({ silent: true });
   }
 
@@ -571,6 +585,14 @@
     const room = roomById(state.roomId);
     $('#chatName').textContent = room.name;
     const tabs = state.tabFilter ? state.tabFilter.split('|')[1] : null;
+    if (room.kind === 'office') {
+      const s = state.officeSnap;
+      $('#chatSub').textContent = s
+        ? s.counts.total + '명 · 열일 ' + s.counts.working + ' · 활동 ' + s.counts.active + ' · 대기 ' + s.counts.idle
+        : room.desc;
+      $('#tabFilterLabel').textContent = '근무 현황';
+      return;
+    }
     $('#chatSub').textContent = tabs ? `${tabs} 탭 · ${room.desc}` : room.desc;
     $('#tabFilterLabel').textContent = tabs ? `${tabs}` : '주요 탭';
   }
@@ -814,6 +836,471 @@
     renderRooms();
   }
 
+  /* ───────── 오피스 (사단 2D 오피스) ───────── */
+  // 근무 상태 기준 — 마지막 시트 기록이 30분 이내면 '열일중', 2시간 이내면 '작업함', 그 밖/기록 없음은 '대기'.
+  const OFC_WORK_MS = 30 * 60e3;
+  const OFC_ACTIVE_MS = 120 * 60e3;
+
+  // 고정 명단. 여기에 없는 이름이 시트에 나타나면 buildOfficeRoster()가 자리를 새로 만든다.
+  const OFFICE_FIXED = [
+    { id: 'ceo', name: '라운 사장님', emoji: '👑', role: '사장님 · 대표', zone: 'ceo', side: '', color: '#F59E0B' },
+    { id: 'a-muse', name: 'A-Muse', emoji: '🎭', role: 'A사단장', zone: 'a', side: 'a', lead: true, color: '#5B4BD6' },
+    { id: 'b-muse', name: 'B-Muse', emoji: '🎭', role: 'B사단장', zone: 'b', side: 'b', lead: true, color: '#7C5CFF' },
+    { id: 'a-pickle', name: '피클', emoji: '🥒', role: 'A사단 · 피클', zone: 'a', side: 'a', color: '#2E9E5B' },
+    { id: 'a-booi', name: '부이', emoji: '🐣', role: 'A사단 · 부이', zone: 'a', side: 'a', color: '#E8A11B' },
+    { id: 'a-instinct', name: 'Instinct', emoji: '⚡', role: 'A사단 · 인스팅트', zone: 'a', side: 'a', color: '#D9480F' },
+    { id: 'a-pally', name: 'Pally', emoji: '🕊', role: 'A사단 · 팔리', zone: 'a', side: 'a', color: '#5F7E9E' },
+    { id: 'a-kkyu', name: '뀨', emoji: '🐰', role: 'A사단 · 뀨', zone: 'a', side: 'a', color: '#C2569B' },
+    { id: 'a-keyring', name: '키링', emoji: '🔑', role: 'A사단 · 키링', zone: 'a', side: 'a', color: '#8A6A3D' },
+    { id: 'b-pickle', name: '피클-B', emoji: '🥒', role: 'B사단 · 피클', zone: 'b', side: 'b', color: '#2E9E5B' },
+    { id: 'b-booi', name: '부이-B', emoji: '🐣', role: 'B사단 · 부이', zone: 'b', side: 'b', color: '#E8A11B' },
+    { id: 'b-hark', name: 'Hark-B', emoji: '🦉', role: 'B사단 · 하크', zone: 'b', side: 'b', color: '#3D6B99' },
+    { id: 'b-kkyu', name: '뀨-B', emoji: '🐰', role: 'B사단 · 뀨', zone: 'b', side: 'b', color: '#C2569B' },
+    { id: 'b-keyring', name: '키링-B', emoji: '🔑', role: 'B사단 · 키링', zone: 'b', side: 'b', color: '#8A6A3D' }
+  ];
+
+  // 이름 토큰 → 사단별 자리. 표에 없는 이름은 새 자리로 만든다.
+  const OFFICE_TOKENS = {
+    'muse': { a: 'a-muse', b: 'b-muse' },
+    '피클': { a: 'a-pickle', b: 'b-pickle' },
+    '부이': { a: 'a-booi', b: 'b-booi' },
+    '뀨': { a: 'a-kkyu', b: 'b-kkyu' },
+    '키링': { a: 'a-keyring', b: 'b-keyring' },
+    'instinct': { a: 'a-instinct' },
+    'pally': { a: 'a-pally' },
+    'hark': { b: 'b-hark' }
+  };
+
+  const OFC_NEW_EMOJI = ['🤖', '🐥', '🦊', '🐼', '🐨', '🦄', '🐙', '🦋', '🐳', '🌱', '🍀', '⭐', '🔮', '🎨', '📚', '🧩', '🕹️', '🦖', '🐧', '🐝'];
+  const OFC_NEW_COLOR = ['#0EA5E9', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16', '#06B6D4'];
+  // 탭 이름으로 새 비서를 찾을 때 거르는 작업 탭 이름
+  const OFC_TAB_STOP = ['시트', '시트1', 'ai채팅', '채팅', '경험은행', '템플릿', '프로젝트', 'db', 'pod', 'sns', 'ai', 'ppt', 'cta', 'faq', 'url', 'api', 'sop', 'pdf'];
+
+  const OFC_ZONE_NAME = { a: 'A사단 존', b: 'B사단 존', n: '새로 합류' };
+
+  function officeHash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+  }
+
+  function officeValidName(name) {
+    const s = String(name || '').trim();
+    if (!s) return false;
+    if (/^(미상|알\s*수\s*없음|알수없음|없음|무명|unknown|n\/a|na|-|–|—|\?+|·+|\.+)$/i.test(s)) return false;
+    if (s.length > 12) return false;
+    // 시트 본문이 작성자 칸에 잘못 들어간 경우(문장·시간표기)는 사람으로 보지 않는다.
+    if (/[:;。!?]/.test(s)) return false;
+    if (/\d{4,}/.test(s)) return false;
+    if (/^[-–—\s]+$/.test(s)) return false;
+    return true;
+  }
+
+  // 작성자 문자열 → 명단 id(문자열) 또는 새 자리 정보(객체).
+  // 'Muse (A사단장)'·'Muse' → A-Muse, 'Muse-B'·'Muse (B사단장)' → B-Muse,
+  // '피클 (A사단)' → 피클, '뀨-B (Cue)' → 뀨-B 처럼 괄호 표기를 걷어내고 사단을 읽는다.
+  function officeResolve(author, sheet) {
+    const raw = String(author || '').trim();
+    if (!raw) return null;
+    const paren = (raw.match(/\(([^)]*)\)/) || [])[1] || '';
+    const pl = paren.toLowerCase();
+    const side = /(^|[^a-z])a\s*사단/.test(pl) ? 'a' : (/(^|[^a-z])b\s*사단/.test(pl) ? 'b' : '');
+    let s = raw.toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s) return null;
+    const bSuffix = /(^|[\s_-])b$/.test(s);
+    const base = (bSuffix ? s.replace(/[\s_-]*b$/, '') : s).trim();
+    if (!base) return null;
+    if (/라운|사장|대표/.test(base)) return 'ceo';
+
+    const tok = Object.keys(OFFICE_TOKENS).find(t => base === t || base.indexOf(t + ' ') === 0 || base.indexOf(t + '-') === 0);
+    if (tok) {
+      const set = OFFICE_TOKENS[tok];
+      const pref = side || (bSuffix ? 'b' : '');
+      let id = null;
+      if (pref) id = set[pref] || null;
+      else id = set[sheet] || set.a || set.b || null;
+      if (id) return id;
+    }
+
+    if (!officeValidName(raw)) return null;
+    const zone = side || (sheet === 'b' ? 'b' : sheet === 'a' ? 'a' : 'n');
+    const slug = base.replace(/\s+/g, '-').replace(/[^0-9a-z가-힣-]/g, '');
+    const h = officeHash(slug || base);
+    return {
+      dyn: true,
+      id: 'x:' + zone + ':' + (slug || 'guest'),
+      name: raw.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim(),
+      zone: zone,
+      emoji: OFC_NEW_EMOJI[h % OFC_NEW_EMOJI.length],
+      color: OFC_NEW_COLOR[h % OFC_NEW_COLOR.length]
+    };
+  }
+
+  // 탭 이름이 '사람 탭'처럼 보이는지 — 124개 작업 탭(예: '겨울꿀템 20', 'Instinct 능력')을
+  // 대원으로 잘못 세우지 않도록, 공백·숫자가 없고 라틴 문자가 들어간 짧은 이름만 인정한다.
+  function officeTabIsPerson(title) {
+    const s = String(title || '').trim();
+    if (!s || s.length > 8) return false;
+    if (/\s/.test(s)) return false;
+    if (/\d/.test(s)) return false;
+    if (!/^[A-Za-z가-힣][A-Za-z가-힣-]*$/.test(s)) return false;
+    if (!/[A-Za-z]/.test(s)) return false;
+    if (OFC_TAB_STOP.indexOf(s.toLowerCase()) >= 0) return false;
+    return true;
+  }
+
+  function officeStatusOf(p, now) {
+    if (!p.last) return 'idle';
+    const d = now - p.last.ts;
+    if (d <= OFC_WORK_MS) return 'working';
+    if (d <= OFC_ACTIVE_MS) return 'active';
+    return 'idle';
+  }
+
+  function officeAgo(ts) {
+    if (!ts) return '기록 없음';
+    const d = Math.max(0, Date.now() - ts);
+    if (d < 60e3) return '방금';
+    if (d < 3600e3) return Math.floor(d / 60e3) + '분 전';
+    if (d < 86400e3) return Math.floor(d / 3600e3) + '시간 전';
+    return Math.floor(d / 86400e3) + '일 전';
+  }
+
+  // 오피스 명단·상태 계산. 고정 명단 + 시트에서 새로 발견한 작성자/탭 이름을 합친다.
+  function officeSnapshot(msgs) {
+    const now = Date.now();
+    const all = OFFICE_FIXED.map(m => Object.assign({}, m, { dyn: false, count: 0, last: null, recent: [] }));
+    const byId = new Map(all.map(m => [m.id, m]));
+
+    (msgs || []).forEach(m => {
+      const r = officeResolve(m.author, m.sheet);
+      let p = null;
+      if (typeof r === 'string') p = byId.get(r) || null;
+      else if (r && r.dyn) {
+        p = byId.get(r.id) || null;
+        if (!p) {
+          p = {
+            id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: r.zone,
+            role: (r.zone === 'b' ? 'B사단' : r.zone === 'a' ? 'A사단' : '신규') + ' · 새로 합류',
+            dyn: true, count: 0, last: null, recent: []
+          };
+          byId.set(p.id, p);
+          all.push(p);
+        }
+      }
+      if (!p) return;
+      p.count++;
+      p.recent.push(m);
+      if (!p.last || m.ts > p.last.ts) p.last = m;
+    });
+
+    // 탭 목록에서도 새 AI 비서를 찾는다(아직 오피스가 읽는 탭에 글이 없어도 자리를 만들어 둔다).
+    ['b', 'a'].forEach(sk => {
+      const tabs = (state.tabsAll && state.tabsAll[sk]) || [];
+      tabs.forEach(t => {
+        const title = String(t.title || '').trim();
+        if (!officeTabIsPerson(title)) return;
+        const r = officeResolve(title, sk);
+        if (!r || typeof r === 'string' || !r.dyn) return;
+        if (byId.has(r.id)) return;
+        const p = {
+          id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: r.zone,
+          role: (r.zone === 'b' ? 'B사단' : r.zone === 'a' ? 'A사단' : '신규') + ' · 새로 합류',
+          dyn: true, count: 0, last: null, recent: []
+        };
+        byId.set(p.id, p);
+        all.push(p);
+      });
+    });
+
+    all.forEach(p => {
+      p.status = officeStatusOf(p, now);
+      p.recent.sort((a, b) => b.ts - a.ts);
+    });
+
+    const rank = { working: 0, active: 1, idle: 2 };
+    const sortSeats = (x, y) => (rank[x.status] - rank[y.status]) ||
+      ((y.last ? y.last.ts : 0) - (x.last ? x.last.ts : 0)) || x.name.localeCompare(y.name);
+
+    const zones = { ceo: [], a: [], b: [], n: [] };
+    const leads = [];
+    all.forEach(p => {
+      if (p.id === 'ceo') { zones.ceo.push(p); return; }
+      if (p.lead) { leads.push(p); return; }
+      (zones[p.zone] || zones.n).push(p);
+    });
+    Object.keys(zones).forEach(k => zones[k].sort(sortSeats));
+    // 팀장석은 자리 순서를 고정한다(A-Muse → B-Muse).
+    leads.sort((x, y) => OFFICE_FIXED.findIndex(m => m.id === x.id) - OFFICE_FIXED.findIndex(m => m.id === y.id));
+
+    const counts = { total: all.length - 1, working: 0, active: 0, idle: 0 };
+    all.forEach(p => { if (p.id !== 'ceo') counts[p.status]++; });
+    return { all, zones, leads, counts, now, ceo: zones.ceo[0] || null };
+  }
+
+  function officeMsgs() {
+    const data = state.rooms[state.roomId];
+    return data ? data.msgs : [];
+  }
+
+  function officeBadge(p, status) {
+    if (p.id === 'ceo') return '👑 사장실';
+    if (status === 'working') return '🔥 열일중';
+    if (status === 'active') return '💻 작업함';
+    return p.last ? '☕ 대기' : '💤 휴식';
+  }
+  function officeStatusText(p, status) {
+    if (p.id === 'ceo') return '👑 사장실 (사단 전체를 보고 있음)';
+    if (status === 'working') return '🔥 열일중 (30분 안에 기록)';
+    if (status === 'active') return '💻 작업함 (2시간 안에 기록)';
+    return p.last ? '☕ 대기 (2시간 넘게 조용함)' : '💤 휴식 (기록 없음)';
+  }
+
+  // 귀여운 미니 캐릭터 — 머리·표정·몸체. 상태에 따라 눈·입이 달라진다.
+  function officeCharSvg(color, status) {
+    const hair = shade(color, -34);
+    const eye = status === 'idle'
+      ? '<path d="M24.6 25.4q2.4-2.2 4.8 0M34.6 25.4q2.4-2.2 4.8 0" fill="none" stroke="#3B2A20" stroke-width="1.7" stroke-linecap="round"/>'
+      : '<circle cx="27" cy="25" r="1.9" fill="#3B2A20"/><circle cx="37" cy="25" r="1.9" fill="#3B2A20"/>';
+    const mouth = status === 'working'
+      ? '<ellipse cx="32" cy="31.4" rx="2.7" ry="2.1" fill="#8C4A3C"/>'
+      : '<path d="M28.6 30.8q3.4 2.6 6.8 0" fill="none" stroke="#3B2A20" stroke-width="1.6" stroke-linecap="round"/>';
+    return '<svg class="seat-char" viewBox="0 0 64 70" aria-hidden="true">' +
+      '<ellipse cx="32" cy="66" rx="15" ry="3.2" fill="rgba(24,32,48,.12)"/>' +
+      '<rect x="20" y="37" width="24" height="26" rx="11" fill="' + color + '"/>' +
+      '<rect x="26.5" y="52" width="11" height="9" rx="4.5" fill="rgba(255,255,255,.38)"/>' +
+      '<circle cx="32" cy="25" r="15" fill="#FFE3C8"/>' +
+      '<path d="M17.4 24.2a14.6 14.6 0 0 1 29.2 0c0 3.6-4.4 2.4-8.6 1.8-2.8-.4-5.4-.4-8.2 0-4.4.8-12.4 1.4-12.4-1.8z" fill="' + hair + '"/>' +
+      eye + mouth +
+      '<circle cx="23.4" cy="30.6" r="2.6" fill="#FFB3A7" opacity=".8"/>' +
+      '<circle cx="40.6" cy="30.6" r="2.6" fill="#FFB3A7" opacity=".8"/>' +
+      '</svg>';
+  }
+
+  function officeSeatEl(p, opts) {
+    opts = opts || {};
+    const b = el('button', 'seat st-' + p.status + (opts.lead ? ' lead' : '') + (opts.ceo ? ' ceo' : '') + (p.dyn ? ' dyn' : ''));
+    b.type = 'button';
+    b.dataset.mid = p.id;
+    b.dataset.status = p.status;
+    b.title = p.name + ' · ' + p.role;
+    b.appendChild(el('span', 'seat-badge', officeBadge(p, p.status)));
+
+    const stage = el('span', 'seat-stage');
+    const mon = el('span', 'seat-mon');
+    mon.appendChild(el('i', 'scr'));
+    stage.appendChild(mon);
+    if (opts.lead) {
+      const mon2 = el('span', 'seat-mon second');
+      mon2.appendChild(el('i', 'scr'));
+      stage.appendChild(mon2);
+    }
+    const wrap = el('span', 'seat-char-wrap');
+    wrap.innerHTML = officeCharSvg(p.color || '#5B4BD6', p.status);
+    stage.appendChild(wrap);
+    stage.appendChild(el('span', 'seat-pin', p.emoji || '🙂'));
+    b.appendChild(stage);
+
+    const desk = el('span', 'seat-desk');
+    if (p.status === 'working') desk.appendChild(el('span', 'seat-paper', '📄'));
+    if (opts.lead) desk.appendChild(el('span', 'seat-tray', '🗂️'));
+    b.appendChild(desk);
+
+    const plate = el('span', 'seat-plate');
+    plate.appendChild(el('b', '', p.name));
+    plate.appendChild(el('i', '', p.role));
+    b.appendChild(plate);
+
+    b.addEventListener('click', () => openSeatSheet(p));
+    return b;
+  }
+
+  function officeZoneEl(key, list, summary) {
+    const z = el('section', 'ofc-zone z-' + key);
+    const head = el('header', 'ofc-zone-head');
+    head.appendChild(el('span', 'zone-dot'));
+    head.appendChild(el('h3', '', OFC_ZONE_NAME[key] || '대원석'));
+    const w = list.filter(p => p.status === 'working').length;
+    head.appendChild(el('span', 'zone-count', list.length + '명' + (w ? ' · 열일 ' + w : '')));
+    z.appendChild(head);
+    const grid = el('div', 'ofc-seats');
+    list.forEach(p => grid.appendChild(officeSeatEl(p)));
+    z.appendChild(grid);
+    return z;
+  }
+
+  function officeCeoRoom(snap) {
+    const ceo = snap.ceo || OFFICE_FIXED[0];
+    const sec = el('section', 'ofc-ceo');
+    const rug = el('div', 'ceo-rug');
+    sec.appendChild(rug);
+
+    const seat = officeSeatEl(ceo, { ceo: true });
+    seat.classList.add('seat-ceo');
+    const room = el('div', 'ceo-room');
+    room.appendChild(seat);
+    sec.appendChild(room);
+
+    const board = el('button', 'ceo-board');
+    board.type = 'button';
+    board.title = '사단 요약 보기';
+    board.appendChild(el('div', 'ceo-board-title', '📋 사단 현황'));
+    const stats = el('div', 'ceo-stats');
+    const mk = (cls, n, label) => {
+      const s = el('span', 'ceo-stat ' + cls);
+      s.appendChild(el('b', '', String(n)));
+      s.appendChild(el('i', '', label));
+      return s;
+    };
+    stats.appendChild(mk('total', snap.counts.total, '대원'));
+    stats.appendChild(mk('working', snap.counts.working, '열일'));
+    stats.appendChild(mk('active', snap.counts.active, '활동'));
+    stats.appendChild(mk('idle', snap.counts.idle, '대기'));
+    board.appendChild(stats);
+
+    const news = el('ul', 'ceo-news');
+    const latest = snap.all.filter(p => p.id !== 'ceo' && p.last).sort((a, b) => b.last.ts - a.last.ts).slice(0, 3);
+    if (!latest.length) news.appendChild(el('li', 'none', '아직 올라온 기록이 없습니다.'));
+    latest.forEach(p => {
+      const li = el('li');
+      li.appendChild(el('span', 'cn-emoji', p.emoji || '🙂'));
+      const tx = el('span', 'cn-tx');
+      tx.appendChild(el('b', '', p.name));
+      tx.appendChild(el('span', '', (p.last.title || p.last.body || '').slice(0, 26)));
+      li.appendChild(tx);
+      li.appendChild(el('span', 'cn-time', officeAgo(p.last.ts)));
+      news.appendChild(li);
+    });
+    board.appendChild(news);
+    board.addEventListener('click', () => openSeatSheet(ceo));
+    sec.appendChild(board);
+    return sec;
+  }
+
+  function officeLeadsRoom(snap) {
+    const sec = el('section', 'ofc-leads');
+    const head = el('header', 'ofc-zone-head');
+    head.appendChild(el('span', 'zone-dot'));
+    head.appendChild(el('h3', '', '팀장실'));
+    head.appendChild(el('span', 'zone-count', snap.leads.length + '석'));
+    sec.appendChild(head);
+    const grid = el('div', 'ofc-seats leads');
+    snap.leads.forEach(p => grid.appendChild(officeSeatEl(p, { lead: true })));
+    sec.appendChild(grid);
+    return sec;
+  }
+
+  function renderOffice() {
+    const box = $('#office');
+    if (!box) return;
+    const snap = officeSnapshot(officeMsgs());
+    state.officeSnap = snap;
+    box.innerHTML = '';
+    const floor = el('div', 'ofc-floor');
+    floor.appendChild(officeCeoRoom(snap));
+    floor.appendChild(officeLeadsRoom(snap));
+    ['a', 'b', 'n'].forEach(k => {
+      if (snap.zones[k] && snap.zones[k].length) floor.appendChild(officeZoneEl(k, snap.zones[k], snap.counts));
+    });
+    const foot = el('div', 'ofc-foot');
+    foot.textContent = '시트에 남은 마지막 기록으로 근무 상태를 계산합니다 · 30분 안 = 🔥 열일중 / 2시간 안 = 💻 작업함 / 그 밖 = ☕ 대기';
+    floor.appendChild(foot);
+    box.appendChild(floor);
+
+    const sub = $('#chatSub');
+    if (sub) sub.textContent = snap.counts.total + '명 · 열일 ' + snap.counts.working + ' · 활동 ' + snap.counts.active + ' · 대기 ' + snap.counts.idle;
+    const lbl = $('#tabFilterLabel');
+    if (lbl) lbl.textContent = '근무 현황';
+  }
+
+  function openSeatSheet(p) {
+    const snap = state.officeSnap || officeSnapshot(officeMsgs());
+    const body = $('#seatSheetBody');
+    if (!body) return;
+    body.innerHTML = '';
+
+    const head = el('div', 'ss-head');
+    const av = el('div', 'ss-av', p.emoji || '🙂');
+    av.style.background = p.color || '#5B4BD6';
+    head.appendChild(av);
+    const titles = el('div', 'ss-titles');
+    const nm = el('b', '', p.name);
+    nm.id = 'seatSheetName';
+    titles.appendChild(nm);
+    titles.appendChild(el('span', '', p.role));
+    head.appendChild(titles);
+    const chip = el('span', 'ss-chip st-' + p.status, officeBadge(p, p.status));
+    head.appendChild(chip);
+    body.appendChild(head);
+
+    if (p.id === 'ceo') {
+      body.appendChild(el('p', 'ss-lead', '사단 전체 근무 현황입니다. 캐릭터를 누르면 그 대원의 최근 기록을 볼 수 있어요.'));
+      const stats = el('div', 'ss-stats');
+      const mk = (cls, n, label) => {
+        const s = el('div', 'ss-stat ' + cls);
+        s.appendChild(el('b', '', String(n)));
+        s.appendChild(el('i', '', label));
+        return s;
+      };
+      stats.appendChild(mk('total', snap.counts.total, '총 대원'));
+      stats.appendChild(mk('working', snap.counts.working, '열일 중'));
+      stats.appendChild(mk('active', snap.counts.active, '활동 중'));
+      stats.appendChild(mk('idle', snap.counts.idle, '대기 중'));
+      body.appendChild(stats);
+      body.appendChild(el('h4', 'ss-h', '최근 소식'));
+      const list = el('div', 'ss-recent');
+      const latest = snap.all.filter(x => x.id !== 'ceo' && x.last).sort((a, b) => b.last.ts - a.last.ts).slice(0, 3);
+      if (!latest.length) list.appendChild(el('p', 'ss-empty', '아직 올라온 기록이 없습니다.'));
+      latest.forEach(x => {
+        const rec = el('div', 'ss-rec');
+        const top = el('div', 'ss-rec-top');
+        top.appendChild(el('b', '', (x.emoji || '🙂') + ' ' + x.name));
+        top.appendChild(el('span', '', officeAgo(x.last.ts)));
+        rec.appendChild(top);
+        rec.appendChild(el('p', '', x.last.title || (x.last.body || '').slice(0, 80) || '(제목 없음)'));
+        rec.appendChild(el('span', 'ss-rec-meta', SHEETS[x.last.sheet].short + '·' + x.last.tab));
+        list.appendChild(rec);
+      });
+      body.appendChild(list);
+    } else {
+      const grid = el('div', 'ss-grid');
+      const cell = (label, value) => {
+        const d = el('div');
+        d.appendChild(el('i', '', label));
+        d.appendChild(el('b', '', value));
+        return d;
+      };
+      grid.appendChild(cell('상태', officeStatusText(p, p.status)));
+      grid.appendChild(cell('마지막 활동', p.last ? (fmtClock(p.last.ts) + ' · ' + officeAgo(p.last.ts)) : '기록 없음'));
+      grid.appendChild(cell('남긴 기록', p.count ? '최근 ' + p.count + '건' : '없음'));
+      body.appendChild(grid);
+
+      body.appendChild(el('h4', 'ss-h', '최근 시트 기록'));
+      const list = el('div', 'ss-recent');
+      if (!p.recent.length) list.appendChild(el('p', 'ss-empty', '아직 이 대원 이름으로 남은 기록이 없습니다.'));
+      p.recent.slice(0, 2).forEach(m => {
+        const rec = el('div', 'ss-rec');
+        const top = el('div', 'ss-rec-top');
+        top.appendChild(el('b', '', m.title || '(제목 없음)'));
+        top.appendChild(el('span', '', fmtClock(m.ts)));
+        rec.appendChild(top);
+        const text = String(m.body || '').replace(/\s+/g, ' ').trim();
+        if (text) rec.appendChild(el('p', '', text.slice(0, 96) + (text.length > 96 ? '…' : '')));
+        rec.appendChild(el('span', 'ss-rec-meta', SHEETS[m.sheet].short + '·' + m.tab + (m.row ? ' · ' + m.row + '행' : '')));
+        list.appendChild(rec);
+      });
+      body.appendChild(list);
+    }
+
+    $('#seatSheetBackdrop').hidden = false;
+    $('#seatSheet').scrollTop = 0;
+  }
+
+  function closeSeatSheet() {
+    const bd = $('#seatSheetBackdrop');
+    if (bd) bd.hidden = true;
+  }
+
   /* ───────── 새로고침/폴링 ───────── */
   let pollTimer = null;
   async function refresh(opts = {}) {
@@ -828,15 +1315,18 @@
       const beforeKeys = new Set(before.map(m => m.key));
       const msgs = await loadRoom(room, { limit: 80 });
       const added = msgs.filter(m => !beforeKeys.has(m.key));
+      const isOffice = room.kind === 'office';
       const box = $('#messages');
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
-      renderMessages();
+      if (isOffice) renderOffice();
+      else renderMessages();
       renderRooms();
       if (added.length && !opts.silent) {
         toast(`${added.length}건 새 기록을 불러왔습니다.`);
-        scrollToBottom(true);
+        if (!isOffice) scrollToBottom(true);
       } else if (added.length && opts.silent) {
-        if (nearBottom) scrollToBottom(true);
+        if (isOffice) { /* 오피스는 자동 갱신만 */ }
+        else if (nearBottom) scrollToBottom(true);
         else { $('#jumpCount').textContent = added.length; $('#jumpNew').hidden = false; }
       } else if (opts.manual) {
         toast('최신 상태로 새로고침했습니다.');
@@ -859,7 +1349,7 @@
     if (!sec || !api.isLive()) return;
     pollTimer = setInterval(() => {
       if (document.hidden) return;
-      if (state.view !== 'chat') return;
+      if (state.view !== 'chat' && state.view !== 'office') return;
       refresh({ silent: true });
     }, sec * 1000);
   }
@@ -1563,11 +2053,18 @@
     }
 
     $('#modalClose').addEventListener('click', closeModal);
+    const ssb = $('#seatSheetBackdrop');
+    if (ssb) {
+      ssb.addEventListener('click', (e) => { if (e.target.id === 'seatSheetBackdrop') closeSeatSheet(); });
+      $('#seatSheetClose').addEventListener('click', closeSeatSheet);
+    }
     $('#modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const m = $('#attachMenu');
       if (m && !m.hidden) { closeAttachMenu(); return; }
+      const ssb2 = $('#seatSheetBackdrop');
+      if (ssb2 && !ssb2.hidden) { closeSeatSheet(); return; }
       if (!$('#modalBackdrop').hidden) closeModal();
     });
 
@@ -1588,7 +2085,8 @@
   /* ───────── 시작 ───────── */
   async function bootstrapData() {
     const box = $('#messages');
-    if (!state.rooms[state.roomId]) {
+    const officeRoom = roomById(state.roomId).kind === 'office';
+    if (!state.rooms[state.roomId] && !officeRoom) {
       box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     }
     // 탭 메타(링크·선택기용)
@@ -1605,11 +2103,12 @@
       console.error(e);
       toast(e.message || '불러오지 못했습니다.', true);
     }
-    renderMessages();
+    if (officeRoom) renderOffice();
+    else renderMessages();
     renderRooms();
     renderChatHead();
     markSeen(state.roomId);
-    scrollToBottom(true);
+    if (!officeRoom) scrollToBottom(true);
     applyMode();
     schedulePoll();
   }
@@ -1644,6 +2143,8 @@
       if (rid && ROOMS.some(r => r.id === rid)) state.roomId = rid;
       if (qs.get('view') === 'chat') { state.view = 'chat'; }
     } catch (e) { /* ignore */ }
+    // ?room=office 로 바로 열면 채팅 대신 오피스 화면이 펼쳐진다.
+    if (roomById(state.roomId).kind === 'office') state.view = 'office';
     // ?room=aichat 처럼 기본 전송 대상이 있는 방으로 바로 열렸을 때도 그 탭을 대상으로 잡는다.
     const startRoom = roomById(state.roomId);
     if (startRoom.target) saveTarget({ sheet: startRoom.target.sheet, tab: startRoom.target.tab });
@@ -1656,7 +2157,7 @@
     bind();
     bindInstall();
     applyMode();
-    if (window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
+    if (state.view !== 'office' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
     $('#app').dataset.view = state.view;
     bootstrapData();
     // 토큰이 없으면 빈 화면에 갇히므로 설정 창을 바로 열어 준다.

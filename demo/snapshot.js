@@ -98,3 +98,37 @@ window.SADAN_DEMO = {
     "a": { "피클": "log", "라운 채팅": "log", "시트1": "log", "ai채팅": "log", "Muse": "table", "뀨": "table", "키링": "table" }
   }
 };
+/* ── 데모 전용: 시각을 '지금' 기준으로 옮긴다 ──
+   오피스 화면의 근무 상태(열일/활동/대기)가 항상 살아 있게 보이도록,
+   가장 최근 행을 6분 전으로 두고 나머지 행은 원래 간격을 유지해 함께 옮긴다.
+   실제 시트와 무관한 가짜 샘플에만 적용된다. */
+(function () {
+  var rows = window.SADAN_DEMO.rows;
+  var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+  var parse = function (t) {
+    var m = String(t || '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
+    if (!m) return 0;
+    return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 9, +m[5]);
+  };
+  var fmt = function (ms) {
+    var d = new Date(ms + 9 * 3600e3);
+    return d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' ' +
+      p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ' KST';
+  };
+  var max = 0;
+  Object.keys(rows).forEach(function (k) {
+    rows[k].forEach(function (r) { var v = parse(r.t); if (v > max) max = v; });
+  });
+  var delta = (Date.now() - 6 * 60e3) - max;
+  Object.keys(rows).forEach(function (k) {
+    rows[k].forEach(function (r) { var v = parse(r.t); if (v) r.t = fmt(v + delta); });
+  });
+  /* 몇몇 대원은 더 최근에 일한 것으로 두어 열일·활동·대기 세 상태가 함께 보이게 한다. */
+  var extra = { 'b|부이-B': 2, 'a|피클': 14, 'b|Hark-B': 38, 'b|뀨-B': 92 };
+  Object.keys(extra).forEach(function (k) {
+    var list = rows[k] || [];
+    if (!list.length) return;
+    var r = list[list.length - 1];
+    r.t = fmt(Date.now() - extra[k] * 60e3);
+  });
+})();

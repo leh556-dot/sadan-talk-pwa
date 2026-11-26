@@ -96,6 +96,9 @@
       <button class="icon-btn small" id="btnSearchClose" title="검색 닫기">✕</button>
     </div>
 
+    <!-- 🏢 사단 오피스 — 방 종류가 office 일 때 채팅 대신 이 화면이 펼쳐진다 -->
+    <div class="office" id="office" hidden></div>
+
     <div class="messages" id="messages" tabindex="0"></div>
 
     <div class="jump-new" id="jumpNew" hidden>새 메시지 <span id="jumpCount">0</span></div>
@@ -144,6 +147,15 @@
     </header>
     <div class="modal-body" id="modalBody"></div>
     <footer class="modal-foot" id="modalFoot"></footer>
+  </div>
+</div>
+
+<!-- ─────────── 오피스 캐릭터 상세 시트 ─────────── -->
+<div class="seat-sheet-backdrop" id="seatSheetBackdrop" hidden>
+  <div class="seat-sheet" id="seatSheet" role="dialog" aria-modal="true" aria-labelledby="seatSheetName">
+    <div class="ss-grip" aria-hidden="true"></div>
+    <div class="ss-body" id="seatSheetBody"></div>
+    <button class="ss-close" id="seatSheetClose" type="button">닫기</button>
   </div>
 </div>
 
