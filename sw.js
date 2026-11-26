@@ -1,7 +1,7 @@
 /* 사단 통합 톡 — 서비스 워커 (앱 셸 오프라인 캐시)
  * 시트 API(Apps Script) 요청은 캐시하지 않습니다. 항상 네트워크.
  */
-const VERSION = 'sadan-talk-v3';
+const VERSION = 'sadan-talk-v4';
 const SHELL = [
   './',
   './index.html',
@@ -16,8 +16,13 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
+  // 캐시를 채울 때는 HTTP 캐시를 건너뛰고 네트워크에서 받는다.
+  // (GitHub Pages가 정적 파일을 10분간 캐시하므로, 그대로 받으면 새 버전을 올려도
+  //  껍데기 캐시에 예전 app.js가 들어가 버린다 — 2026-11-26 실제 발생.)
   event.waitUntil(
-    caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(VERSION)
+      .then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 
