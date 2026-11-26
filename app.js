@@ -107,6 +107,14 @@
   const SEND_ICON = '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 11.5 20 4l-7.5 16-2.2-6.3L4 11.5z" fill="currentColor"/></svg>';
 
   /* ───────── 상태 ───────── */
+  // 오피스 테마 스킨은 브라우저에 기억해 둔다(없으면 데이라이트).
+  function loadStoredSkin() {
+    try {
+      const s = localStorage.getItem('sadan.talk.skin.v1');
+      return (s === 'sakura' || s === 'night') ? s : 'day';
+    } catch (e) { return 'day'; }
+  }
+
   const state = {
     config: loadConfig(),
     view: 'rooms',
@@ -125,7 +133,9 @@
     uploading: false,         // 첨부 업로드 진행 중
     loading: false,
     unread: {},
-    pendingNew: 0
+    pendingNew: 0,
+    skin: loadStoredSkin(),     // 오피스 테마: day · sakura · night
+    officeSnap: null
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -534,7 +544,7 @@
 
       const prev = el('div', 'room-preview');
       if (ofc) {
-        prev.appendChild(el('span', '', '열일 ' + ofc.counts.working + ' · 활동 ' + ofc.counts.active + ' · 대기 ' + ofc.counts.idle));
+        prev.appendChild(el('span', '', '열일 ' + ofc.counts.working + ' · 활동 ' + ofc.counts.active + ' · 대기 ' + ofc.counts.waiting + ' · 휴식 ' + ofc.counts.idle));
       } else if (last) {
         const tag = el('span', 'room-tabtag', (room.id === 'all' ? SHEETS[last.sheet].short + '·' : '') + last.tab);
         prev.appendChild(tag);
@@ -589,7 +599,7 @@
     if (room.kind === 'office') {
       const s = state.officeSnap;
       $('#chatSub').textContent = s
-        ? s.counts.total + '명 · 열일 ' + s.counts.working + ' · 활동 ' + s.counts.active + ' · 대기 ' + s.counts.idle
+        ? s.counts.total + '명 · 열일 ' + s.counts.working + ' · 활동 ' + s.counts.active + ' · 대기 ' + s.counts.waiting + ' · 휴식 ' + s.counts.idle
         : room.desc;
       $('#tabFilterLabel').textContent = '근무 현황';
       return;
@@ -837,12 +847,44 @@
     renderRooms();
   }
 
-  /* ───────── 오피스 (사단 2D 오피스) ───────── */
-  // 근무 상태 기준 — 마지막 시트 기록이 30분 이내면 '열일중', 2시간 이내면 '작업함', 그 밖/기록 없음은 '대기'.
+  /* ───────── 오피스 (사단 2.5D 아이소메트릭 디오라마) ───────── */
+  // 근무 상태 — 30분 안 = 🔥 열일중, 2시간 안 = 💻 작업함, 그 밖 = ☕ 대기, 기록 없음 = 💤 휴식(라운지로 이동)
   const OFC_WORK_MS = 30 * 60e3;
   const OFC_ACTIVE_MS = 120 * 60e3;
+  const OFC_SKIN_KEY = 'sadan.talk.skin.v1';
+  const OFC_SKINS = [
+    { id: 'day', icon: '☀️', name: '데이라이트' },
+    { id: 'sakura', icon: '🌸', name: '벚꽃 라운지' },
+    { id: 'night', icon: '🌙', name: '나이트 오피스' }
+  ];
 
-  // 고정 명단. 여기에 없는 이름이 시트에 나타나면 buildOfficeRoster()가 자리를 새로 만든다.
+  // 등각(2:1) 좌표 — 타일 한 칸 = 가로 64px · 세로 32px
+  const OFC_TW = 64, OFC_TH = 32;
+  const OFC_GW = 16, OFC_GH = 14;
+  const OFC_SCENE_W = 1040, OFC_SCENE_H = 820;
+  const OFC_OX = 520, OFC_OY = 262;
+  const OFC_WALL_H = 214;
+
+  function iso(gx, gy) {
+    return [(gx - gy) * OFC_TW / 2 + OFC_OX, (gx + gy) * OFC_TH / 2 + OFC_OY];
+  }
+  function isoP(gx, gy, up) {
+    const p = iso(gx, gy);
+    return p[0].toFixed(1) + ',' + (p[1] - (up || 0)).toFixed(1);
+  }
+  function isoPoly(pts, cls, attrs) {
+    return '<polygon class="' + cls + '" points="' + pts.join(' ') + '"' + (attrs || '') + '/>';
+  }
+  // 등각 상자 — 윗면 · 앞면(왼쪽) · 옆면(오른쪽). cls로 색 계열(tone-*)을 고른다.
+  function box3d(x, y, w, d, h, tone, cls) {
+    return '<g class="bx tone-' + tone + (cls ? ' ' + cls : '') + '">' +
+      isoPoly([isoP(x, y, h), isoP(x + w, y, h), isoP(x + w, y + d, h), isoP(x, y + d, h)], 'bx-top') +
+      isoPoly([isoP(x, y + d, h), isoP(x + w, y + d, h), isoP(x + w, y + d, 0), isoP(x, y + d, 0)], 'bx-face') +
+      isoPoly([isoP(x + w, y, h), isoP(x + w, y + d, h), isoP(x + w, y + d, 0), isoP(x + w, y, 0)], 'bx-side') +
+      '</g>';
+  }
+
+  // 고정 명단. 여기에 없는 이름이 시트에 나타나면 officeSnapshot이 자리를 새로 만든다.
   const OFFICE_FIXED = [
     { id: 'ceo', name: '라운 사장님', emoji: '👑', role: '사장님 · 대표', zone: 'ceo', side: '', color: '#F59E0B' },
     { id: 'a-muse', name: 'A-Muse', emoji: '🎭', role: 'A사단장', zone: 'a', side: 'a', lead: true, color: '#5B4BD6' },
@@ -884,12 +926,50 @@
   // 탭 이름으로 새 비서를 찾을 때 거르는 작업 탭 이름
   const OFC_TAB_STOP = ['시트', '시트1', 'ai채팅', '채팅', '경험은행', '템플릿', '프로젝트', 'db', 'pod', 'sns', 'ai', 'ppt', 'cta', 'faq', 'url', 'api', 'sop', 'pdf'];
 
-  const OFC_ZONE_NAME = { a: 'A사단 존', b: 'B사단 존', n: '새로 합류' };
+  const OFC_ZONE_NAME = { a: 'A사단 존', b: 'B사단 존', n: '새로 합류', ceo: '사장실', leads: '팀장실' };
+
+  // 대원별 동물 봉제인형 — 사단 구성원은 고유 동물, 새로 합류한 대원은 이름 해시로 배정
+  const OFC_ANIMALS = {
+    ceo: { kind: 'lion', fur: '#F1C062', label: '사자' },
+    'a-muse': { kind: 'cat', fur: '#A99BF2', label: '고양이' },
+    'b-muse': { kind: 'cat', fur: '#8878E6', label: '고양이' },
+    'a-pickle': { kind: 'otter', fur: '#8ACFA0', label: '수달' },
+    'a-booi': { kind: 'chick', fur: '#FFD75C', label: '병아리' },
+    'a-instinct': { kind: 'fox', fur: '#F4A05C', label: '여우' },
+    'a-pally': { kind: 'bunny', fur: '#C6DDF7', label: '토끼' },
+    'a-kkyu': { kind: 'bunny', fur: '#F4A5C8', label: '토끼' },
+    'a-keyring': { kind: 'puppy', fur: '#D6A673', label: '포메' },
+    'b-pickle': { kind: 'otter', fur: '#77C493', label: '수달' },
+    'b-booi': { kind: 'chick', fur: '#FFCE48', label: '병아리' },
+    'b-hark': { kind: 'owl', fur: '#93AED3', label: '올빼미' },
+    'b-kkyu': { kind: 'bunny', fur: '#EE96C0', label: '토끼' },
+    'b-keyring': { kind: 'puppy', fur: '#C8996A', label: '포메' }
+  };
+  const OFC_DYN_KINDS = ['fox', 'cat', 'bunny', 'puppy', 'bear', 'panda', 'chick', 'otter', 'owl'];
+  const OFC_DYN_FUR = ['#F5B183', '#A9C7F0', '#F2A7C3', '#9FD3B0', '#C7B3F0', '#FFD36E', '#9ECFD8', '#E0A98A'];
+
+  function mixHex(hex, to, amt) {
+    const a = String(hex || '#888888').replace('#', '');
+    const b = String(to || '#FFFFFF').replace('#', '');
+    const n = parseInt(a.length === 3 ? a.replace(/(.)/g, '$1$1') : a, 16);
+    const m = parseInt(b.length === 3 ? b.replace(/(.)/g, '$1$1') : b, 16);
+    if (isNaN(n) || isNaN(m)) return hex || '#888888';
+    const mix = (v, w) => Math.round(v + (w - v) * amt);
+    return '#' + [mix((n >> 16) & 255, (m >> 16) & 255), mix((n >> 8) & 255, (m >> 8) & 255), mix(n & 255, m & 255)]
+      .map(v => v.toString(16).padStart(2, '0')).join('');
+  }
 
   function officeHash(s) {
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     return h;
+  }
+
+  function officeAnimal(p) {
+    const meta = OFC_ANIMALS[p.id];
+    if (meta) return meta;
+    const h = officeHash(String(p.name || p.id || 'x'));
+    return { kind: OFC_DYN_KINDS[h % OFC_DYN_KINDS.length], fur: OFC_DYN_FUR[h % OFC_DYN_FUR.length], label: '' };
   }
 
   function officeValidName(name) {
@@ -905,8 +985,6 @@
   }
 
   // 작성자 문자열 → 명단 id(문자열) 또는 새 자리 정보(객체).
-  // 'Muse (A사단장)'·'Muse' → A-Muse, 'Muse-B'·'Muse (B사단장)' → B-Muse,
-  // '피클 (A사단)' → 피클, '뀨-B (Cue)' → 뀨-B 처럼 괄호 표기를 걷어내고 사단을 읽는다.
   function officeResolve(author, sheet) {
     const raw = String(author || '').trim();
     if (!raw) return null;
@@ -944,8 +1022,7 @@
     };
   }
 
-  // 탭 이름이 '사람 탭'처럼 보이는지 — 124개 작업 탭(예: '겨울꿀템 20', 'Instinct 능력')을
-  // 대원으로 잘못 세우지 않도록, 공백·숫자가 없고 라틴 문자가 들어간 짧은 이름만 인정한다.
+  // 탭 이름이 '사람 탭'처럼 보이는지 — 작업 탭(예: '겨울꿀템 20')을 대원으로 세우지 않도록.
   function officeTabIsPerson(title) {
     const s = String(title || '').trim();
     if (!s || s.length > 8) return false;
@@ -962,7 +1039,7 @@
     const d = now - p.last.ts;
     if (d <= OFC_WORK_MS) return 'working';
     if (d <= OFC_ACTIVE_MS) return 'active';
-    return 'idle';
+    return 'waiting';
   }
 
   function officeAgo(ts) {
@@ -1003,7 +1080,6 @@
     });
 
     // 탭 목록에서도 새 AI 비서를 찾는다(아직 오피스가 읽는 탭에 글이 없어도 자리를 만들어 둔다).
-    // 기록이 아직 없는 탭 이름은 '새로 합류' 구역에 모아 둔다 — 진짜 사단원 자리를 적지 않게.
     ['b', 'a'].forEach(sk => {
       const tabs = (state.tabsAll && state.tabsAll[sk]) || [];
       tabs.forEach(t => {
@@ -1036,7 +1112,7 @@
       p.recent.sort((a, b) => b.ts - a.ts);
     });
 
-    const rank = { working: 0, active: 1, idle: 2 };
+    const rank = { working: 0, active: 1, waiting: 2, idle: 3 };
     const sortSeats = (x, y) => (rank[x.status] - rank[y.status]) ||
       ((y.last ? y.last.ts : 0) - (x.last ? x.last.ts : 0)) || x.name.localeCompare(y.name);
 
@@ -1051,7 +1127,7 @@
     // 팀장석은 자리 순서를 고정한다(A-Muse → B-Muse).
     leads.sort((x, y) => OFFICE_FIXED.findIndex(m => m.id === x.id) - OFFICE_FIXED.findIndex(m => m.id === y.id));
 
-    const counts = { total: all.length - 1, working: 0, active: 0, idle: 0 };
+    const counts = { total: all.length - 1, working: 0, active: 0, waiting: 0, idle: 0 };
     all.forEach(p => { if (p.id !== 'ceo') counts[p.status]++; });
     return { all, zones, leads, counts, now, ceo: zones.ceo[0] || null };
   }
@@ -1061,153 +1137,774 @@
     return data ? data.msgs : [];
   }
 
+  // 💤 휴식(idle) 대원은 라운지 소파로 이동한다. 사장님과 아직 합류 전인 탭 비서는 제외.
+  function officeAtLounge(p) {
+    return !!p && !p.tabOnly && p.id !== 'ceo' && p.status === 'idle';
+  }
+
   function officeBadge(p, status) {
     if (p.id === 'ceo') return '👑 사장실';
     if (status === 'working') return '🔥 열일중';
     if (status === 'active') return '💻 작업함';
-    return p.last ? '☕ 대기' : '💤 휴식';
+    if (status === 'waiting') return '☕ 대기';
+    return '💤 휴식';
   }
   function officeStatusText(p, status) {
     if (p.id === 'ceo') return '👑 사장실 (사단 전체를 보고 있음)';
     if (status === 'working') return '🔥 열일중 (30분 안에 기록)';
     if (status === 'active') return '💻 작업함 (2시간 안에 기록)';
-    return p.last ? '☕ 대기 (2시간 넘게 조용함)' : '💤 휴식 (기록 없음)';
+    if (status === 'waiting') return '☕ 대기 (2시간 넘게 조용함)';
+    return '💤 휴식 (기록 없음 · 라운지에서 쉬는 중)';
   }
 
-  // 귀여운 미니 캐릭터 — 머리·표정·몸체. 상태에 따라 눈·입이 달라진다.
-  function officeCharSvg(color, status) {
-    const hair = shade(color, -34);
-    const eye = status === 'idle'
-      ? '<path d="M24.6 25.4q2.4-2.2 4.8 0M34.6 25.4q2.4-2.2 4.8 0" fill="none" stroke="#3B2A20" stroke-width="1.7" stroke-linecap="round"/>'
-      : '<circle cx="27" cy="25" r="1.9" fill="#3B2A20"/><circle cx="37" cy="25" r="1.9" fill="#3B2A20"/>';
-    const mouth = status === 'working'
-      ? '<ellipse cx="32" cy="31.4" rx="2.7" ry="2.1" fill="#8C4A3C"/>'
-      : '<path d="M28.6 30.8q3.4 2.6 6.8 0" fill="none" stroke="#3B2A20" stroke-width="1.6" stroke-linecap="round"/>';
-    return '<svg class="seat-char" viewBox="0 0 64 70" aria-hidden="true">' +
-      '<ellipse cx="32" cy="66" rx="15" ry="3.2" fill="rgba(24,32,48,.12)"/>' +
-      '<rect x="20" y="37" width="24" height="26" rx="11" fill="' + color + '"/>' +
-      '<rect x="26.5" y="52" width="11" height="9" rx="4.5" fill="rgba(255,255,255,.38)"/>' +
-      '<circle cx="32" cy="25" r="15" fill="#FFE3C8"/>' +
-      '<path d="M17.4 24.2a14.6 14.6 0 0 1 29.2 0c0 3.6-4.4 2.4-8.6 1.8-2.8-.4-5.4-.4-8.2 0-4.4.8-12.4 1.4-12.4-1.8z" fill="' + hair + '"/>' +
-      eye + mouth +
-      '<circle cx="23.4" cy="30.6" r="2.6" fill="#FFB3A7" opacity=".8"/>' +
-      '<circle cx="40.6" cy="30.6" r="2.6" fill="#FFB3A7" opacity=".8"/>' +
-      '</svg>';
+  /* ── 봉제인형 동물 캐릭터 ── */
+  // 좌표계: 가로 150 · 세로 190 (책상 위에 앉은 모습). 머리 중심 (75,46).
+  function petSvg(kind, fur, opts) {
+    opts = opts || {};
+    const light = mixHex(fur, '#FFFFFF', 0.55);
+    const pale = mixHex(fur, '#FFFFFF', 0.8);
+    const dark = mixHex(fur, '#4A3126', 0.28);
+    const deep = mixHex(fur, '#4A3126', 0.5);
+    const pink = '#FFB7C5';
+    const ink = '#3B2A22';
+    const sleep = !!opts.sleep;
+    const outline = ' stroke="rgba(74,49,38,.20)" stroke-width="1.1"';
+    const white = '#FFFDF8';
+
+    let ears = '';
+    let extra = '';
+    let headFill = fur;
+    let bodyFill = fur;
+
+    if (kind === 'cat') {
+      ears = '<path d="M55 31 L48 7 Q48 2 54 7 L69 20 Z" fill="' + fur + '"' + outline + ' stroke-linejoin="round"/>' +
+        '<path d="M95 31 L102 7 Q102 2 96 7 L81 20 Z" fill="' + fur + '"' + outline + ' stroke-linejoin="round"/>' +
+        '<path d="M57 25 L54 12 L64 20 Z" fill="' + pink + '" opacity=".9"/>' +
+        '<path d="M93 25 L96 12 L86 20 Z" fill="' + pink + '" opacity=".9"/>';
+      extra = '<path d="M101 94 q17 1 14 -16 q-2 -11 -11 -8" fill="none" stroke="' + fur + '" stroke-width="8" stroke-linecap="round"/>' +
+        '<path d="M45 54 L31 51 M45 59 L31 61 M105 54 L119 51 M105 59 L119 61" stroke="' + deep + '" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>';
+    } else if (kind === 'fox') {
+      ears = '<path d="M55 33 L46 2 Q46 -3 53 3 L70 19 Z" fill="' + fur + '"' + outline + ' stroke-linejoin="round"/>' +
+        '<path d="M95 33 L104 2 Q104 -3 97 3 L80 19 Z" fill="' + fur + '"' + outline + ' stroke-linejoin="round"/>' +
+        '<path d="M57 26 L52 10 L64 19 Z" fill="' + pink + '" opacity=".85"/>' +
+        '<path d="M93 26 L98 10 L86 19 Z" fill="' + pink + '" opacity=".85"/>' +
+        '<path d="M49 6 L46 2 L53 3 Z" fill="' + deep + '"/><path d="M101 6 L104 2 L97 3 Z" fill="' + deep + '"/>';
+      extra = '<path d="M99 96 q22 -2 18 -22 q-3 -13 -14 -9 q9 8 1 16 q-6 5 -13 3" fill="' + fur + '" opacity=".95"/>' +
+        '<path d="M112 70 q7 -4 9 3 q-3 6 -9 3 z" fill="' + pale + '"/>';
+    } else if (kind === 'bunny') {
+      ears = '<ellipse cx="63" cy="12" rx="8" ry="24" transform="rotate(-9 63 12)" fill="' + fur + '"' + outline + '/>' +
+        '<ellipse cx="87" cy="12" rx="8" ry="24" transform="rotate(9 87 12)" fill="' + fur + '"' + outline + '/>' +
+        '<ellipse cx="63" cy="13" rx="4.2" ry="16" transform="rotate(-9 63 13)" fill="' + pink + '" opacity=".9"/>' +
+        '<ellipse cx="87" cy="13" rx="4.2" ry="16" transform="rotate(9 87 13)" fill="' + pink + '" opacity=".9"/>';
+      extra = '<rect x="71" y="62" width="3.6" height="6" rx="1.6" fill="#fff" stroke="rgba(74,49,38,.16)"/>' +
+        '<rect x="75.6" y="62" width="3.6" height="6" rx="1.6" fill="#fff" stroke="rgba(74,49,38,.16)"/>';
+    } else if (kind === 'puppy') {
+      ears = '<ellipse cx="53" cy="48" rx="9.5" ry="18" transform="rotate(14 53 48)" fill="' + dark + '"' + outline + '/>' +
+        '<ellipse cx="97" cy="48" rx="9.5" ry="18" transform="rotate(-14 97 48)" fill="' + dark + '"' + outline + '/>';
+      extra = '<ellipse cx="75" cy="66" rx="4" ry="5" fill="#F58E9C" opacity=".9"/>';
+    } else if (kind === 'bear') {
+      ears = '<circle cx="55" cy="24" r="11" fill="' + fur + '"' + outline + '/>' +
+        '<circle cx="95" cy="24" r="11" fill="' + fur + '"' + outline + '/>' +
+        '<circle cx="55" cy="24" r="6" fill="' + pink + '" opacity=".75"/>' +
+        '<circle cx="95" cy="24" r="6" fill="' + pink + '" opacity=".75"/>';
+    } else if (kind === 'panda') {
+      headFill = '#FFFBF4';
+      bodyFill = '#FFFBF4';
+      ears = '<circle cx="54" cy="23" r="11" fill="#3A3A44"/>' + '<circle cx="96" cy="23" r="11" fill="#3A3A44"/>';
+      extra = '<ellipse cx="65" cy="46" rx="8" ry="9" transform="rotate(-16 65 46)" fill="#3A3A44"/>' +
+        '<ellipse cx="85" cy="46" rx="8" ry="9" transform="rotate(16 85 46)" fill="#3A3A44"/>';
+    } else if (kind === 'chick') {
+      ears = '<path d="M69 21 q2 -10 7 -3 q2 -8 7 -1" fill="none" stroke="' + deep + '" stroke-width="3" stroke-linecap="round"/>';
+      headFill = fur;
+    } else if (kind === 'otter') {
+      ears = '<circle cx="56" cy="25" r="7" fill="' + dark + '"' + outline + '/>' +
+        '<circle cx="94" cy="25" r="7" fill="' + dark + '"' + outline + '/>';
+      extra = '<path d="M44 55 L30 52 M44 60 L30 62 M106 55 L120 52 M106 60 L120 62" stroke="' + deep + '" stroke-width="1.1" stroke-linecap="round" opacity=".5"/>';
+    } else if (kind === 'owl') {
+      ears = '<path d="M54 26 L50 8 Q50 3 57 9 L66 19 Z" fill="' + dark + '"/>' +
+        '<path d="M96 26 L100 8 Q100 3 93 9 L84 19 Z" fill="' + dark + '"/>';
+      extra = '<ellipse cx="75" cy="48" rx="23" ry="20" fill="' + pale + '" opacity=".9"/>' +
+        '<circle cx="65" cy="46" r="8.4" fill="none" stroke="#4A3A2E" stroke-width="1.6"/>' +
+        '<circle cx="85" cy="46" r="8.4" fill="none" stroke="#4A3A2E" stroke-width="1.6"/>' +
+        '<path d="M73.4 46 h3.2" stroke="#4A3A2E" stroke-width="1.6"/>' +
+        '<path d="M75 52 L80.5 59 L75 65 L69.5 59 Z" fill="#F0A540" stroke="#D98A2C" stroke-width=".8"/>';
+    } else if (kind === 'lion') {
+      ears = '<circle cx="56" cy="25" r="9" fill="' + fur + '"' + outline + '/>' +
+        '<circle cx="94" cy="25" r="9" fill="' + fur + '"' + outline + '/>';
+      extra = '<path d="M75 8 q8 8 16 4 q4 9 13 8 q-1 10 7 15 q-7 7 -2 16 q-10 2 -11 12 q-10 -3 -16 6 q-6 -9 -16 -6 q-1 -10 -11 -12 q5 -9 -2 -16 q8 -5 7 -15 q9 1 13 -8 q8 4 16 -4 z" fill="' + mixHex(fur, '#C98A3C', 0.55) + '" opacity=".55"/>';
+    }
+
+    const crown = kind === 'lion'
+      ? '<g class="pet-crown"><path d="M60 12 L64 2 L69 9 L75 1 L81 9 L86 2 L90 12 Z" fill="#FFD873" stroke="#D9A93E" stroke-width="1.1" stroke-linejoin="round"/>' +
+        '<circle cx="75" cy="8" r="1.8" fill="#E2574C"/></g>'
+      : '';
+
+    const muzzle = (kind === 'chick')
+      ? '<path d="M68.5 51 L81.5 51 L75 60 Z" fill="#F4A63A" stroke="#DB8C27" stroke-width=".8" stroke-linejoin="round"/>'
+      : (kind === 'owl' ? '' :
+        '<ellipse cx="75" cy="57" rx="12.5" ry="9" fill="' + pale + '" opacity=".95"/>' +
+        '<path d="M71.4 53.6 q3.6 -2.8 7.2 0 q-1.5 4 -3.6 4 q-2.1 0 -3.6 -4 z" fill="' + ink + '"/>');
+
+    const mouth = (kind === 'chick' || kind === 'owl')
+      ? ''
+      : (opts.talk
+        ? '<ellipse cx="75" cy="63.5" rx="3.4" ry="2.8" fill="#A9553F"/>'
+        : '<path d="M71 61.5 q4 3.4 8 0" fill="none" stroke="' + ink + '" stroke-width="1.6" stroke-linecap="round"/>');
+
+    const eye = (cx) => sleep
+      ? '<path d="M' + (cx - 6.5) + ' 46 q6.5 5.5 13 0" fill="none" stroke="' + ink + '" stroke-width="2.4" stroke-linecap="round"/>'
+      : '<g class="pet-eye"><ellipse cx="' + cx + '" cy="45" rx="4.3" ry="5" fill="' + ink + '"/>' +
+        '<circle cx="' + (cx - 1.5) + '" cy="43.2" r="1.5" fill="#fff" opacity=".95"/></g>';
+
+    const face =
+      (kind === 'panda' ? '' : '') + eye(65) + eye(85) +
+      '<ellipse cx="53" cy="56" rx="6.4" ry="3.6" fill="#FF9AA6" opacity=".45"/>' +
+      '<ellipse cx="97" cy="56" rx="6.4" ry="3.6" fill="#FF9AA6" opacity=".45"/>' +
+      muzzle + mouth +
+      (kind === 'owl' ? '' : '');
+
+    const arms = '<g class="pet-arms">' +
+      '<ellipse class="pet-arm arm-l" cx="55" cy="80" rx="9.5" ry="11.5" fill="' + fur + '"' + outline + '/>' +
+      '<ellipse class="pet-arm arm-r" cx="95" cy="80" rx="9.5" ry="11.5" fill="' + fur + '"' + outline + '/>' +
+      '<circle cx="55" cy="88" r="4.2" fill="' + pale + '" opacity=".9"/>' +
+      '<circle cx="95" cy="88" r="4.2" fill="' + pale + '" opacity=".9"/>' +
+      '</g>';
+
+    return '<g class="pet pet-' + kind + (sleep ? ' sleeping' : '') + '" data-animal="' + kind + '">' +
+      '<ellipse class="pet-shadow" cx="75" cy="104" rx="30" ry="6" fill="#2A1C14" opacity=".14"/>' +
+      extra +
+      '<rect class="pet-body" x="52" y="60" width="46" height="44" rx="21" fill="' + bodyFill + '"' + outline + '/>' +
+      '<ellipse cx="75" cy="84" rx="15" ry="14" fill="' + pale + '" opacity=".92"/>' +
+      arms +
+      ears + crown +
+      '<circle class="pet-head" cx="75" cy="46" r="26" fill="' + headFill + '"' + outline + '/>' +
+      '<ellipse cx="67" cy="33" rx="13" ry="8" fill="#FFFFFF" opacity=".24"/>' +
+      face +
+      '</g>';
   }
 
+  /* ── 책상 그림 (좌표계 150 x 190) ── */
+  function deskSvg(p, animal, opts) {
+    opts = opts || {};
+    const wide = !!opts.ceo || !!opts.lead;
+    const away = officeAtLounge(p);
+    const x1 = wide ? 6 : 18;
+    const x2 = wide ? 144 : 132;
+    const mid = 75, topY = 96, midY = 122, botY = 146, th = 12;
+    let s = '<g class="desk' + (wide ? ' desk-wide' : '') + '">';
+
+    if (away) {
+      s += '<g class="chair empty-chair">' +
+        '<rect x="62" y="80" width="26" height="26" rx="10" fill="var(--f-fabric)"/>' +
+        '<rect x="58" y="99" width="34" height="10" rx="5" fill="var(--f-fabric-2)"/>' +
+        '<rect x="70" y="118" width="10" height="14" fill="var(--f-metal)"/>' +
+        '<rect x="62" y="130" width="26" height="5" rx="2.5" fill="var(--f-metal)"/>' +
+        '</g>';
+    }
+
+    // 상판 + 앞·옆면
+    s += '<polygon class="desk-top" points="' + mid + ',' + topY + ' ' + x2 + ',' + midY + ' ' + mid + ',' + botY + ' ' + x1 + ',' + midY + '"/>';
+    s += '<polygon class="desk-fl" points="' + x1 + ',' + midY + ' ' + mid + ',' + botY + ' ' + mid + ',' + (botY + th) + ' ' + x1 + ',' + (midY + th) + '"/>';
+    s += '<polygon class="desk-fr" points="' + mid + ',' + botY + ' ' + x2 + ',' + midY + ' ' + x2 + ',' + (midY + th) + ' ' + mid + ',' + (botY + th) + '"/>';
+    s += '<polygon class="desk-shade" points="' + x1 + ',' + (midY + th) + ' ' + mid + ',' + (botY + th) + ' ' + x2 + ',' + (midY + th) + ' ' + mid + ',' + (botY + th + 3) + '"/>';
+    // 상판 결
+    s += '<path class="desk-grain" d="M' + (x1 + 22) + ' ' + (midY - 8) + ' L' + (mid - 14) + ' ' + (botY - 10) + ' M' + (mid + 18) + ' ' + (botY - 8) + ' L' + (x2 - 16) + ' ' + (midY - 4) + '"/>';
+
+    // 모니터 (오른쪽) — working이면 화면이 켜져 빛난다
+    const on = p.status === 'working';
+    s += '<g class="monitor' + (on ? ' on' : '') + '">' +
+      '<rect x="101" y="88" width="32" height="26" rx="3" fill="#39414E" stroke="#2B323D"/>' +
+      '<rect class="mon-screen" x="103.5" y="90.5" width="27" height="21" rx="2" fill="' + (on ? '#BFE8FF' : '#2C3542') + '"/>' +
+      (on ? '<path class="mon-line" d="M107 96 h20 M107 101 h14 M107 106 h17" stroke="#7EC8F0" stroke-width="1.6" stroke-linecap="round"/>' : '') +
+      '<rect x="113" y="114" width="8" height="8" fill="#4A5461"/>' +
+      '<ellipse cx="117" cy="123" rx="11" ry="3" fill="#4A5461"/>' +
+      '</g>';
+
+    // 머그컵 · 서류 · 화분
+    s += '<g class="mug"><ellipse cx="41" cy="114" rx="7.5" ry="3.4" fill="var(--f-white)"/>' +
+      '<path d="M33.5 114 v7 a7.5 3.4 0 0 0 15 0 v-7" fill="var(--f-white)"/>' +
+      '<path d="M48 115 q4 1 0 4" fill="none" stroke="var(--f-white)" stroke-width="1.6"/></g>';
+    s += '<polygon class="paper" points="48,124 64,130 56,135 40,129"/>';
+    if (wide) s += '<g class="desk-plant"><ellipse cx="33" cy="104" rx="5.5" ry="5" fill="var(--f-leaf)"/>' +
+      '<ellipse cx="27" cy="101" rx="4.5" ry="4" fill="var(--f-leaf-2)"/>' +
+      '<rect x="27" y="103" width="11" height="8" rx="2" fill="var(--f-pot)"/></g>';
+
+    // 명패 — 사장·팀장은 금색
+    if (wide) {
+      s += '<rect class="nameplate" x="60" y="150" width="30" height="7" rx="2" fill="#F5C95B" stroke="#D9A93E"/>' +
+        '<text class="nameplate-tx" x="75" y="155.6" font-size="4.6" text-anchor="middle" fill="#7A5320">' + (opts.ceo ? 'CEO' : 'LEAD') + '</text>';
+    }
+
+    if (on) {
+      s += '<g class="type-spark"><circle cx="46" cy="112" r="1.6"/><circle cx="60" cy="118" r="1.3"/><circle cx="52" cy="120" r="1.1"/></g>';
+    }
+    s += '</g>';
+    return s;
+  }
+
+  /* ── 자리 배치 (등각 격자 좌표) ── */
+  const OFC_SLOTS = {
+    ceo: [[3.0, 2.15]],
+    leads: [[11.4, 2.05], [13.6, 2.05]],
+    a: [[0.9, 5.3], [3.3, 5.3], [5.7, 5.3], [0.9, 7.5], [3.3, 7.5], [5.7, 7.5]],
+    b: [[10.3, 5.3], [12.7, 5.3], [15.1, 5.3], [10.3, 7.5], [12.7, 7.5]],
+    n: [[3.9, 11.6], [5.9, 11.6], [2.7, 11.6], [3.0, 13.0], [5.0, 13.0]]
+  };
+  const OFC_EXTRA_SLOTS = {
+    a: [[0.9, 9.7], [2.7, 9.7], [0.9, 11.6], [2.7, 11.6]],
+    b: [[13.5, 9.7], [15.1, 9.7], [13.5, 11.6], [15.1, 11.6]],
+    leads: [[15.4, 3.1]],
+    n: [[1.2, 13.0], [5.9, 13.0], [7.3, 13.0]],
+    ceo: [[4.6, 3.1]]
+  };
+  // 라운지 소파 자리 — idle 대원이 여기로 이동한다
+  const OFC_LOUNGE_SLOTS = [[7.0, 5.65], [7.62, 5.65], [8.24, 5.65], [7.0, 7.85], [7.62, 7.85], [8.24, 7.85], [6.6, 9.4], [9.4, 9.4]];
+
+  function officeSeatSlots(snap) {
+    const map = new Map();
+    ['ceo', 'leads', 'a', 'b', 'n'].forEach(key => {
+      const arr = key === 'leads' ? snap.leads : snap.zones[key];
+      const base = OFC_SLOTS[key] || [];
+      const extra = OFC_EXTRA_SLOTS[key] || [];
+      (arr || []).forEach((p, i) => {
+        let slot = i < base.length ? base[i] : extra[(i - base.length) % (extra.length || 1)];
+        if (!slot) slot = [2 + i * 0.6, 12.6];
+        map.set(p.id, slot);
+      });
+    });
+    return map;
+  }
+
+  /* ── 배경(바닥·벽·가구) SVG ── */
+  function rug(x1, y1, x2, y2, cls) {
+    return isoPoly([isoP(x1, y1), isoP(x2, y1), isoP(x2, y2), isoP(x1, y2)], 'rug ' + cls) +
+      isoPoly([isoP(x1 + 0.16, y1 + 0.16), isoP(x2 - 0.16, y1 + 0.16), isoP(x2 - 0.16, y2 - 0.16), isoP(x1 + 0.16, y2 - 0.16)], 'rug-in');
+  }
+
+  function floorLabel(gx, gy, text, cls) {
+    const p = iso(gx, gy);
+    return '<text class="flabel ' + (cls || '') + '" x="' + p[0].toFixed(1) + '" y="' + p[1].toFixed(1) +
+      '" transform="rotate(26.57 ' + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ')" text-anchor="middle">' + text + '</text>';
+  }
+
+  function wallWinN(g1, g2, h1, h2) {
+    const g1i = g1 - 0.1, g2i = g2 + 0.1;
+    return '<g class="win">' +
+      isoPoly([isoP(g1i, 0, h1 - 6), isoP(g2i, 0, h1 - 6), isoP(g2i, 0, h2 + 6), isoP(g1i, 0, h2 + 6)], 'win-frame') +
+      isoPoly([isoP(g1, 0, h1), isoP(g2, 0, h1), isoP(g2, 0, h2), isoP(g1, 0, h2)], 'win-glass') +
+      isoPoly([isoP((g1 + g2) / 2 - 0.05, 0, h1), isoP((g1 + g2) / 2 + 0.05, 0, h1), isoP((g1 + g2) / 2 + 0.05, 0, h2), isoP((g1 + g2) / 2 - 0.05, 0, h2)], 'win-bar') +
+      isoPoly([isoP(g1, 0, (h1 + h2) / 2 - 3), isoP(g2, 0, (h1 + h2) / 2 - 3), isoP(g2, 0, (h1 + h2) / 2 + 1), isoP(g1, 0, (h1 + h2) / 2 + 1)], 'win-bar') +
+      isoPoly([isoP(g1i - 0.06, 0, h1 - 10), isoP(g2i + 0.06, 0, h1 - 10), isoP(g2i + 0.06, 0, h1 - 6), isoP(g1i - 0.06, 0, h1 - 6)], 'win-sill') +
+      '</g>';
+  }
+
+  function treePlant(x, y, k) {
+    k = k || 1;
+    const p = iso(x, y);
+    const cx = p[0], cy = p[1];
+    return '<g class="plant">' + box3d(x, y, 0.5, 0.5, 15, 'pot') +
+      '<line class="stem" x1="' + cx + '" y1="' + (cy - 12) + '" x2="' + cx + '" y2="' + (cy - 44 * k) + '"/>' +
+      '<ellipse cx="' + (cx - 11 * k) + '" cy="' + (cy - 38 * k) + '" rx="' + (12 * k) + '" ry="' + (9 * k) + '" fill="var(--f-leaf)"/>' +
+      '<ellipse cx="' + (cx + 12 * k) + '" cy="' + (cy - 44 * k) + '" rx="' + (11 * k) + '" ry="' + (8.5 * k) + '" fill="var(--f-leaf-2)"/>' +
+      '<ellipse cx="' + cx + '" cy="' + (cy - 56 * k) + '" rx="' + (9.5 * k) + '" ry="' + (8 * k) + '" fill="var(--f-leaf)"/>' +
+      '</g>';
+  }
+
+  function sofa(x, y, w, d, tone) {
+    let s = '<g class="sofa">';
+    s += box3d(x, y, w, d, 15, tone || 'fabric');
+    s += box3d(x, y, w, 0.24, 44, tone || 'fabric');
+    s += box3d(x, y + 0.16, 0.2, d - 0.16, 27, tone || 'fabric');
+    s += box3d(x + w - 0.2, y + 0.16, 0.2, d - 0.16, 27, tone || 'fabric');
+    s += box3d(x + 0.26, y + 0.3, (w - 0.6) / 2, d - 0.5, 19, 'fabric-light');
+    s += box3d(x + 0.26 + (w - 0.6) / 2 + 0.08, y + 0.3, (w - 0.6) / 2, d - 0.5, 19, 'fabric-light');
+    s += '</g>';
+    return s;
+  }
+
+  function officeSceneSvg() {
+    let s = '<svg class="iso-scene" viewBox="0 0 ' + OFC_SCENE_W + ' ' + OFC_SCENE_H + '" aria-hidden="true">';
+
+    // 벽 (뒤) — 북쪽 벽과 서쪽 벽
+    s += '<g class="wall wall-n">' +
+      isoPoly([isoP(0, 0, 0), isoP(OFC_GW, 0, 0), isoP(OFC_GW, 0, OFC_WALL_H), isoP(0, 0, OFC_WALL_H)], 'wall-face') +
+      isoPoly([isoP(0, 0, 0), isoP(OFC_GW, 0, 0), isoP(OFC_GW, 0, 30), isoP(0, 0, 30)], 'wall-skirting') +
+      isoPoly([isoP(0, 0, OFC_WALL_H), isoP(OFC_GW, 0, OFC_WALL_H), isoP(OFC_GW, 0, OFC_WALL_H + 9), isoP(0, 0, OFC_WALL_H + 9)], 'wall-cap') +
+      '</g>';
+    s += '<g class="wall wall-w">' +
+      isoPoly([isoP(0, 0, 0), isoP(0, OFC_GH, 0), isoP(0, OFC_GH, OFC_WALL_H), isoP(0, 0, OFC_WALL_H)], 'wall-face-2') +
+      isoPoly([isoP(0, 0, 0), isoP(0, OFC_GH, 0), isoP(0, OFC_GH, 30), isoP(0, 0, 30)], 'wall-skirting') +
+      isoPoly([isoP(0, 0, OFC_WALL_H), isoP(0, OFC_GH, OFC_WALL_H), isoP(0, OFC_GH, OFC_WALL_H + 9), isoP(0, 0, OFC_WALL_H + 9)], 'wall-cap') +
+      '</g>';
+
+    // 창문·시계·화이트보드
+    s += wallWinN(1.9, 4.3, 96, 188);
+    s += wallWinN(9.9, 13.1, 96, 188);
+    const ck = iso(5.3, 0);
+    s += '<g class="wall-clock"><circle cx="' + ck[0].toFixed(1) + '" cy="' + (ck[1] - 158).toFixed(1) + '" r="26" fill="var(--f-white)" stroke="var(--f-wood-face)" stroke-width="5"/>' +
+      '<path d="M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' v-12 M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' h9" stroke="#6B5A48" stroke-width="3" stroke-linecap="round"/></g>';
+    // 화이트보드 (북쪽 벽, 팀장실 위)
+    const wb1 = iso(6.2, 0), wb2 = iso(8.6, 0);
+    s += '<g class="whiteboard">' +
+      isoPoly([isoP(6.1, 0, 64), isoP(8.7, 0, 64), isoP(8.7, 0, 158), isoP(6.1, 0, 158)], 'wb-frame') +
+      isoPoly([isoP(6.18, 0, 70), isoP(8.62, 0, 70), isoP(8.62, 0, 152), isoP(6.18, 0, 152)], 'wb-face') +
+      '<g transform="translate(' + ((wb1[0] + wb2[0]) / 2 - 26).toFixed(1) + ',' + (((wb1[1] + wb2[1]) / 2) - 124).toFixed(1) + ') rotate(26.57)">' +
+      '<text class="wb-title" x="0" y="0" font-size="24" font-weight="800">TEAM</text>' +
+      '<path d="M2 8 h62" stroke="#8FB7E8" stroke-width="3" stroke-linecap="round"/>' +
+      '<rect x="4" y="16" width="20" height="14" rx="2" fill="#FFE28A" opacity=".9"/>' +
+      '<rect x="28" y="20" width="16" height="11" rx="2" fill="#FFC0CB" opacity=".9"/>' +
+      '<rect x="48" y="16" width="14" height="13" rx="2" fill="#BFE3C0" opacity=".9"/>' +
+      '</g></g>';
+
+    // 바닥 타일
+    s += '<g class="iso-floor">';
+    for (let gy = 0; gy < OFC_GH; gy++) {
+      for (let gx = 0; gx < OFC_GW; gx++) {
+        s += isoPoly([isoP(gx, gy), isoP(gx + 1, gy), isoP(gx + 1, gy + 1), isoP(gx, gy + 1)], 'tile tile-' + ((gx + gy) % 2 ? 'b' : 'a'));
+      }
+    }
+    for (let gy = 1; gy < OFC_GH; gy++) { const a = iso(0, gy), b = iso(OFC_GW, gy); s += '<line class="plank" x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '"/>'; }
+    for (let gx = 2; gx < OFC_GW; gx += 2) { const a = iso(gx, 0), b = iso(gx, OFC_GH); s += '<line class="plank-v" x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '"/>'; }
+    s += '</g>';
+
+    // 구역 러그
+    s += rug(0.35, 4.35, 6.75, 10.45, 'rug-a');
+    s += rug(9.25, 4.35, 15.65, 10.45, 'rug-b');
+    s += rug(6.6, 4.6, 8.9, 10.3, 'rug-lounge');
+    s += rug(0.4, 0.4, 5.6, 3.9, 'rug-ceo');
+    s += rug(10.2, 0.4, 15.6, 3.9, 'rug-leads');
+    s += rug(1.0, 10.7, 6.6, 13.6, 'rug-new');
+
+    // 구역 이름
+    s += floorLabel(3.0, 3.5, 'CEO ROOM', 'fl-ceo');
+    s += floorLabel(12.8, 3.5, 'LEADS', 'fl-leads');
+    s += floorLabel(3.4, 10.1, 'A사단 존', 'fl-a');
+    s += floorLabel(12.4, 10.1, 'B사단 존', 'fl-b');
+    s += floorLabel(3.8, 13.2, '새로 합류', 'fl-n');
+    s += floorLabel(7.6, 9.9, 'LOUNGE', 'fl-lounge');
+
+    // 햇살 (창문 아래로 비스듬히)
+    s += '<g class="beams">' +
+      isoPoly([isoP(2.0, 0, 94), isoP(4.2, 0, 94), isoP(5.9, 3.4, 0), isoP(3.7, 3.4, 0)], 'beam') +
+      isoPoly([isoP(10.0, 0, 94), isoP(13.0, 0, 94), isoP(14.7, 3.4, 0), isoP(11.7, 3.4, 0)], 'beam') +
+      '</g>';
+
+    // 가구 — 뒤쪽(벽)부터 앞쪽 순서로
+    s += '<g class="furn">';
+    s += box3d(0.55, 0.1, 1.5, 0.5, 108, 'wood2', 'bookshelf');
+    // 책등
+    for (let i = 0; i < 6; i++) {
+      s += '<rect class="book b' + (i % 5) + '" x="' + (43 + i * 13).toFixed(1) + '" y="' + (iso(0.7, 0.6)[1] - 92 + (i % 2) * 4).toFixed(1) + '" width="9" height="' + (34 - (i % 3) * 5) + '" rx="1.5"/>';
+    }
+    s += box3d(8.05, 0.1, 0.6, 0.45, 92, 'metal', 'coffee');   // 커피머신
+    s += box3d(14.2, 0.1, 0.8, 0.5, 126, 'metal', 'vending');   // 자판기
+    s += '<rect class="vending-glass" x="' + (iso(14.7, 0.6)[0] - 15).toFixed(1) + '" y="' + (iso(14.7, 0.6)[1] - 108).toFixed(1) + '" width="26" height="54" rx="3"/>';
+    s += treePlant(15.3, 1.3, 1.05);
+    s += treePlant(0.5, 3.6, 0.9);
+
+    // 사장실 — 안락의자 + 협탁
+    s += box3d(4.5, 2.3, 0.8, 0.8, 22, 'fabric-light', 'armchair');
+    s += box3d(4.5, 2.05, 0.8, 0.22, 44, 'fabric-light', 'armchair-back');
+    s += box3d(4.55, 3.2, 0.6, 0.5, 20, 'wood', 'side-table');
+
+    // 라운지 — 소파 2개 · 커피 테이블 · 스탠드
+    s += sofa(6.7, 5.05, 2.1, 0.85);
+    s += sofa(6.7, 7.25, 2.1, 0.85);
+    s += box3d(7.35, 6.25, 0.95, 0.75, 17, 'wood', 'coffee-table');
+    s += '<ellipse class="cmug" cx="' + (iso(7.8, 6.7)[0] + 4).toFixed(1) + '" cy="' + (iso(7.8, 6.7)[1] - 20).toFixed(1) + '" rx="4" ry="2" fill="var(--f-white)"/>';
+    s += treePlant(8.7, 9.6, 0.95);
+    s += '<g class="floor-lamp"><line x1="' + iso(6.4, 4.7)[0] + '" y1="' + iso(6.4, 4.7)[1] + '" x2="' + iso(6.4, 4.7)[0] + '" y2="' + (iso(6.4, 4.7)[1] - 96) + '" stroke="var(--f-metal)" stroke-width="3"/>' +
+      '<path d="M' + (iso(6.4, 4.7)[0] - 16) + ' ' + (iso(6.4, 4.7)[1] - 96) + ' h32 l-7 -18 h-18 z" fill="var(--f-lamp)"/></g>';
+    // 화분 몇 개
+    s += treePlant(6.2, 13.2, 0.85);
+    s += treePlant(15.4, 12.9, 0.9);
+    s += treePlant(8.9, 12.9, 0.8);
+    s += '</g>';
+
+    // 파티션 (사장실·팀장실 유리벽)
+    s += '<g class="partitions">';
+    s += box3d(0.4, 4.0, 3.2, 0.08, 84, 'glass');
+    s += box3d(5.5, 0.4, 0.08, 3.6, 84, 'glass');
+    s += box3d(10.3, 4.0, 5.3, 0.08, 84, 'glass');
+    s += box3d(9.9, 0.4, 0.08, 3.6, 84, 'glass');
+    s += '</g>';
+
+    // 벚꽃 잎 · 별 (테마별로 CSS가 켜고 끈다)
+    s += '<g class="deco deco-petals">';
+    for (let i = 0; i < 18; i++) {
+      const gx = 0.6 + ((i * 2.7) % 14.4), gy = 0.8 + ((i * 3.3) % 12.4);
+      const q = iso(gx, gy);
+      s += '<ellipse class="petal p' + (i % 6) + '" cx="' + q[0].toFixed(1) + '" cy="' + (q[1] - 60 - (i % 5) * 18).toFixed(1) + '" rx="5" ry="3.2" transform="rotate(' + (i * 37) + ' ' + q[0].toFixed(1) + ' ' + (q[1] - 60).toFixed(1) + ')" style="animation-delay:' + ((i % 7) * 0.9).toFixed(1) + 's"/>';
+    }
+    s += '</g>';
+    s += '<g class="deco deco-stars">';
+    for (let i = 0; i < 12; i++) {
+      const q = iso(2.2 + (i % 6) * 0.36, 0);
+      s += '<circle class="star s' + (i % 3) + '" cx="' + (q[0] + (i % 3) * 14).toFixed(1) + '" cy="' + (q[1] - 120 - (i % 4) * 16).toFixed(1) + '" r="' + (1.6 + (i % 2)) + '"/>';
+    }
+    s += '</g>';
+    s += '</svg>';
+    return s;
+  }
+
+  /* ── 상태별 말풍선 문구 ── */
+  function officeBubble(p) {
+    const list = ['열일중!', '작성 중...', '타닥타닥', '집중!', '보고 쓰는 중'];
+    return list[officeHash(p.id) % list.length];
+  }
+
+  /* ── 좌석(책상) 요소 ── */
   function officeSeatEl(p, opts) {
     opts = opts || {};
-    const b = el('button', 'seat st-' + p.status + (opts.lead ? ' lead' : '') + (opts.ceo ? ' ceo' : '') + (p.dyn ? ' dyn' : ''));
+    const animal = officeAnimal(p);
+    const away = officeAtLounge(p);
+    const b = el('button', 'seat st-' + p.status + ' animal-' + animal.kind +
+      (opts.ceo ? ' ceo' : '') + (opts.lead ? ' lead' : '') + (p.dyn ? ' dyn' : '') + (away ? ' away' : ''));
     b.type = 'button';
     b.dataset.mid = p.id;
     b.dataset.status = p.status;
-    b.title = p.name + ' · ' + p.role;
+    b.dataset.animal = animal.kind;
+    b.title = p.name + ' · ' + p.role + ' · ' + officeBadge(p, p.status);
+    const slot = opts.slot || [0, 0];
+    const pos = iso(slot[0], slot[1]);
+    b.dataset.gx = String(slot[0]);
+    b.dataset.gy = String(slot[1]);
+    b.style.left = pos[0].toFixed(1) + 'px';
+    b.style.top = (pos[1] + 20).toFixed(1) + 'px';
+    b.style.zIndex = String(120 + Math.round((slot[0] + slot[1]) * 8));
+
     b.appendChild(el('span', 'seat-badge', officeBadge(p, p.status)));
 
     const stage = el('span', 'seat-stage');
-    const mon = el('span', 'seat-mon');
-    mon.appendChild(el('i', 'scr'));
-    stage.appendChild(mon);
-    if (opts.lead) {
-      const mon2 = el('span', 'seat-mon second');
-      mon2.appendChild(el('i', 'scr'));
-      stage.appendChild(mon2);
+    stage.innerHTML = '<svg class="seat-art" viewBox="0 0 150 190" aria-hidden="true">' +
+      (away ? '' : petSvg(animal.kind, animal.fur, { sleep: p.status === 'idle', talk: p.status === 'working' })) +
+      deskSvg(p, animal, opts) +
+      '</svg>';
+    if (!away) {
+      if (p.status === 'working') stage.appendChild(el('span', 'pet-bubble bubble-work', officeBubble(p)));
+      else if (p.status === 'active') stage.appendChild(el('span', 'pet-bubble bubble-active', '작성 중…'));
+      else if (p.status === 'waiting') stage.appendChild(el('span', 'pet-bubble bubble-wait', '☕'));
+    } else {
+      stage.appendChild(el('span', 'seat-empty-tag', '자리 비움'));
     }
-    const wrap = el('span', 'seat-char-wrap');
-    wrap.innerHTML = officeCharSvg(p.color || '#5B4BD6', p.status);
-    stage.appendChild(wrap);
-    stage.appendChild(el('span', 'seat-pin', p.emoji || '🙂'));
     b.appendChild(stage);
-
-    const desk = el('span', 'seat-desk');
-    if (p.status === 'working') desk.appendChild(el('span', 'seat-paper', '📄'));
-    if (opts.lead) desk.appendChild(el('span', 'seat-tray', '🗂️'));
-    b.appendChild(desk);
 
     const plate = el('span', 'seat-plate');
     plate.appendChild(el('b', '', p.name));
-    plate.appendChild(el('i', '', p.role));
+    plate.appendChild(el('i', '', (animal.label ? animal.label + ' · ' : '') + p.role));
     b.appendChild(plate);
 
     b.addEventListener('click', () => openSeatSheet(p));
     return b;
   }
 
-  function officeZoneEl(key, list, summary) {
-    const z = el('section', 'ofc-zone z-' + key);
-    const head = el('header', 'ofc-zone-head');
-    head.appendChild(el('span', 'zone-dot'));
-    head.appendChild(el('h3', '', OFC_ZONE_NAME[key] || '대원석'));
-    const w = list.filter(p => p.status === 'working').length;
-    head.appendChild(el('span', 'zone-count', list.length + '명' + (w ? ' · 열일 ' + w : '')));
-    z.appendChild(head);
-    const grid = el('div', 'ofc-seats');
-    list.forEach(p => grid.appendChild(officeSeatEl(p)));
-    z.appendChild(grid);
-    return z;
+  /* ── 라운지에서 쉬는 대원 ── */
+  function officeLoungeEl(snap) {
+    const wrap = el('div', 'ofc-lounge');
+    const sleepers = snap.all.filter(officeAtLounge);
+    sleepers.forEach((p, i) => {
+      const animal = officeAnimal(p);
+      const slot = OFC_LOUNGE_SLOTS[i % OFC_LOUNGE_SLOTS.length];
+      const pos = iso(slot[0], slot[1]);
+      const n = el('button', 'lounge-pet st-idle');
+      n.type = 'button';
+      n.dataset.mid = p.id;
+      n.dataset.animal = animal.kind;
+      n.dataset.gx = String(slot[0]);
+      n.dataset.gy = String(slot[1]);
+      n.title = p.name + ' · 💤 휴식 중 (라운지)';
+      n.style.left = pos[0].toFixed(1) + 'px';
+      n.style.top = (pos[1] + 6).toFixed(1) + 'px';
+      n.style.zIndex = String(118 + Math.round((slot[0] + slot[1]) * 8));
+      n.innerHTML = '<svg class="lounge-art" viewBox="36 0 78 116" aria-hidden="true">' +
+        petSvg(animal.kind, animal.fur, { sleep: true }) + '</svg>' +
+        '<span class="zzz"><i>Z</i><i>z</i><i>z</i></span>' +
+        '<span class="lounge-name">' + p.name + '</span>';
+      n.addEventListener('click', () => openSeatSheet(p));
+      wrap.appendChild(n);
+    });
+    return wrap;
   }
 
-  function officeCeoRoom(snap) {
-    const ceo = snap.ceo || OFFICE_FIXED[0];
-    const sec = el('section', 'ofc-ceo');
-    const rug = el('div', 'ceo-rug');
-    sec.appendChild(rug);
+  /* ── 오피스 지도 전체 ── */
+  const ofcView = { scale: 1, fit: 1, x: 0, y: 0, touched: false };
 
-    const seat = officeSeatEl(ceo, { ceo: true });
-    seat.classList.add('seat-ceo');
-    const room = el('div', 'ceo-room');
-    room.appendChild(seat);
-    room.appendChild(el('span', 'ceo-plant', '🌿'));
-    sec.appendChild(room);
+  function officeApplyTransform(world) {
+    if (!world) return;
+    world.style.transform = 'translate(' + ofcView.x.toFixed(1) + 'px,' + ofcView.y.toFixed(1) + 'px) scale(' + ofcView.scale.toFixed(4) + ')';
+    world.dataset.scale = ofcView.scale.toFixed(3);
+    const pct = document.querySelector('#office .ofc-zoom-pct');
+    if (pct) pct.textContent = Math.round(ofcView.scale / (ofcView.fit || 1) * 100) + '%';
+  }
 
-    const board = el('button', 'ceo-board');
-    board.type = 'button';
-    board.title = '사단 요약 보기';
-    board.appendChild(el('div', 'ceo-board-title', '📋 사단 현황'));
-    const stats = el('div', 'ceo-stats');
-    const mk = (cls, n, label) => {
-      const s = el('span', 'ceo-stat ' + cls);
-      s.appendChild(el('b', '', String(n)));
+  function fitOfficeView(vp) {
+    if (!vp) return;
+    const vw = vp.clientWidth || 0, vh = vp.clientHeight || 0;
+    const s = (vw > 80 && vh > 80) ? Math.min(vw / OFC_SCENE_W, vh / OFC_SCENE_H) : 1;
+    ofcView.fit = s;
+    ofcView.scale = s;
+    ofcView.x = (vw - OFC_SCENE_W * s) / 2;
+    ofcView.y = (vh - OFC_SCENE_H * s) / 2;
+    ofcView.touched = false;
+    officeApplyTransform(document.querySelector('#office .iso-world'));
+  }
+
+  function setOfficeZoom(next, cx, cy) {
+    const vp = document.querySelector('#office .ofc-viewport');
+    const world = document.querySelector('#office .iso-world');
+    if (!vp || !world) return;
+    const lo = (ofcView.fit || 1) * 0.65, hi = (ofcView.fit || 1) * 3.2;
+    const prev = ofcView.scale;
+    const s = Math.max(lo, Math.min(hi, next));
+    const px = (typeof cx === 'number') ? cx : (vp.clientWidth || 0) / 2;
+    const py = (typeof cy === 'number') ? cy : (vp.clientHeight || 0) / 2;
+    ofcView.x = px - (px - ofcView.x) * (s / prev);
+    ofcView.y = py - (py - ofcView.y) * (s / prev);
+    ofcView.scale = s;
+    ofcView.touched = true;
+    officeApplyTransform(world);
+  }
+
+  function officeTools() {
+    const tools = el('div', 'ofc-tools');
+    const skins = el('div', 'ofc-skins');
+    OFC_SKINS.forEach(sk => {
+      const b = el('button', 'ofc-skin' + (sk.id === state.skin ? ' active' : ''), sk.icon + ' ' + sk.name);
+      b.type = 'button';
+      b.dataset.skin = sk.id;
+      b.addEventListener('click', () => {
+        state.skin = sk.id;
+        try { localStorage.setItem(OFC_SKIN_KEY, sk.id); } catch (e) { /* 저장 차단 환경 */ }
+        const box = $('#office');
+        if (box) box.dataset.skin = sk.id;
+        document.querySelectorAll('#office .ofc-skin').forEach(x => x.classList.toggle('active', x.dataset.skin === sk.id));
+      });
+      skins.appendChild(b);
+    });
+    tools.appendChild(skins);
+    return tools;
+  }
+
+  function officeZoomBox() {
+    const box = el('div', 'ofc-zoombox');
+    const mk = (cls, text, title, fn) => {
+      const b = el('button', 'ofc-zbtn ' + cls, text);
+      b.type = 'button';
+      b.title = title;
+      b.addEventListener('click', fn);
+      return b;
+    };
+    box.appendChild(mk('ofc-zoom-out', '−', '축소', () => setOfficeZoom(ofcView.scale / 1.22)));
+    box.appendChild(el('span', 'ofc-zoom-pct', '100%'));
+    box.appendChild(mk('ofc-zoom-in', '+', '확대', () => setOfficeZoom(ofcView.scale * 1.22)));
+    box.appendChild(mk('ofc-zoom-reset', '↺ 100%', '전체 보기로 돌아가기', () => fitOfficeView(document.querySelector('#office .ofc-viewport'))));
+    return box;
+  }
+
+  function officeLegend() {
+    const l = el('div', 'ofc-legend');
+    const item = (cls, text) => { const s = el('span', 'ofc-lg ' + cls); s.appendChild(el('i', '')); s.appendChild(el('b', '', text)); return s; };
+    l.appendChild(item('working', '열일중'));
+    l.appendChild(item('active', '작업함'));
+    l.appendChild(item('waiting', '대기'));
+    l.appendChild(item('idle', '휴식'));
+    return l;
+  }
+
+  function bindOfficeMap(vp, world) {
+    let drag = null;
+    const pts = new Map();
+    vp.addEventListener('pointerdown', (e) => {
+      if (e.target && e.target.closest && e.target.closest('.seat,.lounge-pet')) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        drag = { pinch: Math.hypot(a.x - b.x, a.y - b.y), dist0: ofcView.scale, pan: false };
+        return;
+      }
+      drag = { x: e.clientX, y: e.clientY, ox: ofcView.x, oy: ofcView.y, pan: true, moved: false };
+      vp.classList.add('grabbing');
+      if (vp.setPointerCapture) { try { vp.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ } }
+    });
+    vp.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (drag.pinch && pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        ofcView.touched = true;
+        setOfficeZoom(drag.dist0 * (d / drag.pinch));
+        return;
+      }
+      if (!drag.pan) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 3) drag.moved = true;
+      ofcView.x = drag.ox + dx;
+      ofcView.y = drag.oy + dy;
+      ofcView.touched = true;
+      officeApplyTransform(world);
+    });
+    const end = (e) => {
+      if (e && pts.has(e.pointerId)) pts.delete(e.pointerId);
+      if (pts.size < 2) drag = drag && drag.pinch ? null : drag;
+      if (!e || pts.size === 0) { drag = null; vp.classList.remove('grabbing'); }
+    };
+    vp.addEventListener('pointerup', end);
+    vp.addEventListener('pointercancel', end);
+    vp.addEventListener('pointerleave', (e) => { if (e.buttons === 0) end(e); });
+    vp.addEventListener('wheel', (e) => {
+      if (!e.deltaY) return;
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      setOfficeZoom(ofcView.scale * (e.deltaY < 0 ? 1.12 : 0.89), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+  }
+
+  function officeWrap(snap) {
+    const wrap = el('div', 'ofc-wrap');
+    const mapwrap = el('div', 'ofc-mapwrap');
+    const vp = el('div', 'ofc-viewport');
+    vp.setAttribute('aria-label', '사단 오피스 아이소메트릭 지도');
+    const world = el('div', 'iso-world');
+    world.dataset.scale = ofcView.scale.toFixed(3);
+    world.innerHTML = officeSceneSvg();
+
+    const slots = officeSeatSlots(snap);
+    const mkZone = (key, list) => {
+      const z = el('div', 'ofc-zone z-' + key);
+      (list || []).forEach(p => z.appendChild(officeSeatEl(p, {
+        slot: slots.get(p.id),
+        ceo: p.id === 'ceo',
+        lead: !!p.lead
+      })));
+      return z;
+    };
+    world.appendChild(mkZone('ceo', snap.zones.ceo));
+    const leads = el('div', 'ofc-leads');
+    snap.leads.forEach(p => leads.appendChild(officeSeatEl(p, { slot: slots.get(p.id), lead: true })));
+    world.appendChild(leads);
+    world.appendChild(mkZone('a', snap.zones.a));
+    world.appendChild(mkZone('b', snap.zones.b));
+    world.appendChild(mkZone('n', snap.zones.n));
+    world.appendChild(officeLoungeEl(snap));
+
+    vp.appendChild(world);
+    mapwrap.appendChild(vp);
+    mapwrap.appendChild(officeTools());
+    const hint = el('div', 'ofc-hint', '드래그로 이동 · 휠/핀치로 확대');
+    mapwrap.appendChild(hint);
+    mapwrap.appendChild(officeZoomBox());
+    mapwrap.appendChild(officeLegend());
+    wrap.appendChild(mapwrap);
+    wrap.appendChild(officePanel(snap));
+
+    officeApplyTransform(world);
+    bindOfficeMap(vp, world);
+    requestAnimationFrame(() => {
+      if (!ofcView.touched) fitOfficeView(vp);
+    });
+    return wrap;
+  }
+
+  /* ── 오늘의 오피스 패널 ── */
+  function officePanel(snap) {
+    const panel = el('aside', 'ofc-panel');
+    const head = el('div', 'pn-head');
+    const t = el('div', 'pn-title');
+    t.appendChild(el('b', '', '📋 오늘의 오피스'));
+    const d = new Date();
+    t.appendChild(el('span', '', (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + DAY_KO[d.getDay()] + ')'));
+    head.appendChild(t);
+    head.appendChild(el('span', 'pn-live', 'LIVE'));
+    panel.appendChild(head);
+
+    const stats = el('div', 'pn-stats');
+    const stat = (cls, n, label) => {
+      const s = el('div', 'pn-stat ' + cls);
+      s.appendChild(el('b', 'pn-num', String(n)));
       s.appendChild(el('i', '', label));
       return s;
     };
-    stats.appendChild(mk('total', snap.counts.total, '대원'));
-    stats.appendChild(mk('working', snap.counts.working, '열일'));
-    stats.appendChild(mk('active', snap.counts.active, '활동'));
-    stats.appendChild(mk('idle', snap.counts.idle, '대기'));
-    board.appendChild(stats);
+    stats.appendChild(stat('total', snap.counts.total, '전체'));
+    stats.appendChild(stat('working', snap.counts.working, '🔥 열일'));
+    stats.appendChild(stat('active', snap.counts.active, '💻 활동'));
+    stats.appendChild(stat('waiting', snap.counts.waiting, '☕ 대기'));
+    stats.appendChild(stat('idle', snap.counts.idle, '💤 휴식'));
+    panel.appendChild(stats);
 
-    const news = el('ul', 'ceo-news');
-    const latest = snap.all.filter(p => p.id !== 'ceo' && p.last).sort((a, b) => b.last.ts - a.last.ts).slice(0, 3);
-    if (!latest.length) news.appendChild(el('li', 'none', '아직 올라온 기록이 없습니다.'));
-    latest.forEach(p => {
-      const li = el('li');
-      li.appendChild(el('span', 'cn-emoji', p.emoji || '🙂'));
-      const tx = el('span', 'cn-tx');
-      tx.appendChild(el('b', '', p.name));
-      tx.appendChild(el('span', '', (p.last.title || p.last.body || '').slice(0, 26)));
-      li.appendChild(tx);
-      li.appendChild(el('span', 'cn-time', officeAgo(p.last.ts)));
-      news.appendChild(li);
+    const groups = [
+      ['ceo', '👑 사장실', snap.zones.ceo],
+      ['leads', '🎭 팀장실', snap.leads],
+      ['a', '🌱 A사단 존', snap.zones.a],
+      ['b', '🌿 B사단 존', snap.zones.b],
+      ['n', '✨ 새로 합류', snap.zones.n]
+    ];
+    const list = el('div', 'pn-list');
+    groups.forEach(gp => {
+      const label = gp[1], arr = gp[2];
+      if (!arr || !arr.length) return;
+      const g = el('div', 'pn-group');
+      const gh = el('div', 'pn-group-h');
+      gh.appendChild(el('b', '', label));
+      gh.appendChild(el('span', '', arr.length + '명'));
+      g.appendChild(gh);
+      arr.forEach(p => {
+        const b = el('button', 'pn-member');
+        b.type = 'button';
+        b.dataset.mid = p.id;
+        b.appendChild(el('span', 'pn-dot st-' + p.status));
+        b.appendChild(el('span', 'pn-name', p.name));
+        b.appendChild(el('span', 'pn-state', officeBadge(p, p.status)));
+        b.addEventListener('click', () => focusOfficeMember(p));
+        g.appendChild(b);
+      });
+      list.appendChild(g);
     });
-    board.appendChild(news);
-    board.addEventListener('click', () => openSeatSheet(ceo));
-    sec.appendChild(board);
-    return sec;
+    panel.appendChild(list);
+
+    const feed = el('div', 'pn-feed');
+    const fh = el('div', 'pn-group-h');
+    fh.appendChild(el('b', '', '🗞 최근 시트 활동'));
+    feed.appendChild(fh);
+    const latest = snap.all.filter(x => x.last).sort((a, b) => b.last.ts - a.last.ts).slice(0, 6);
+    if (!latest.length) feed.appendChild(el('p', 'pn-empty', '아직 올라온 기록이 없습니다.'));
+    latest.forEach(x => {
+      const r = el('button', 'pn-rec');
+      r.type = 'button';
+      const top = el('div', 'pn-rec-top');
+      top.appendChild(el('b', '', x.name));
+      top.appendChild(el('i', '', officeAgo(x.last.ts)));
+      r.appendChild(top);
+      const text = String(x.last.title || x.last.body || '(제목 없음)').replace(/\s+/g, ' ');
+      r.appendChild(el('p', '', text.slice(0, 54) + (text.length > 54 ? '…' : '')));
+      r.appendChild(el('span', 'pn-rec-meta', SHEETS[x.last.sheet].short + ' · ' + x.last.tab));
+      r.addEventListener('click', () => focusOfficeMember(x));
+      feed.appendChild(r);
+    });
+    panel.appendChild(feed);
+    panel.appendChild(el('p', 'pn-foot', '시트 기록으로 근무 상태를 계산해요 · 30분 안 🔥 / 2시간 안 💻 / 그 밖 ☕ / 기록 없음 💤'));
+    return panel;
   }
 
-  function officeLeadsRoom(snap) {
-    const sec = el('section', 'ofc-leads');
-    const head = el('header', 'ofc-zone-head');
-    head.appendChild(el('span', 'zone-dot'));
-    head.appendChild(el('h3', '', '팀장실'));
-    head.appendChild(el('span', 'zone-count', snap.leads.length + '석'));
-    sec.appendChild(head);
-    const grid = el('div', 'ofc-seats leads');
-    snap.leads.forEach(p => grid.appendChild(officeSeatEl(p, { lead: true })));
-    sec.appendChild(grid);
-    sec.appendChild(el('div', 'ofc-leads-note', 'A·B사단을 지휘하는 사단장석 — 자리마다 지난 기록으로 상태를 보여줍니다'));
-    return sec;
+  // 패널에서 대원을 누르면 그 자리로 화면을 옮기고 반짝인 뒤 상세 시트를 연다.
+  function focusOfficeMember(p) {
+    const seat = document.querySelector('#office .seat[data-mid="' + p.id + '"]');
+    const vp = document.querySelector('#office .ofc-viewport');
+    if (seat) {
+      document.querySelectorAll('#office .seat.hl, #office .lounge-pet.hl').forEach(n => n.classList.remove('hl'));
+      seat.classList.add('hl');
+      if (vp && seat.dataset.gx != null) {
+        const pos = iso(Number(seat.dataset.gx), Number(seat.dataset.gy));
+        if (vp.clientWidth > 80) {
+          ofcView.x = vp.clientWidth / 2 - pos[0] * ofcView.scale;
+          ofcView.y = vp.clientHeight * 0.55 - (pos[1] - 40) * ofcView.scale;
+          ofcView.touched = true;
+          officeApplyTransform(document.querySelector('#office .iso-world'));
+        }
+      }
+      setTimeout(() => seat.classList.remove('hl'), 2600);
+    }
+    openSeatSheet(p);
   }
 
   function renderOffice() {
@@ -1216,20 +1913,15 @@
     box.hidden = false;
     const snap = officeSnapshot(officeMsgs());
     state.officeSnap = snap;
+    box.dataset.skin = state.skin || 'day';
     box.innerHTML = '';
-    const floor = el('div', 'ofc-floor');
-    floor.appendChild(officeCeoRoom(snap));
-    floor.appendChild(officeLeadsRoom(snap));
-    ['a', 'b', 'n'].forEach(k => {
-      if (snap.zones[k] && snap.zones[k].length) floor.appendChild(officeZoneEl(k, snap.zones[k], snap.counts));
-    });
-    const foot = el('div', 'ofc-foot');
-    foot.textContent = '시트에 남은 마지막 기록으로 근무 상태를 계산합니다 · 30분 안 = 🔥 열일중 / 2시간 안 = 💻 작업함 / 그 밖 = ☕ 대기';
-    floor.appendChild(foot);
-    box.appendChild(floor);
+    box.appendChild(officeWrap(snap));
 
     const sub = $('#chatSub');
-    if (sub) sub.textContent = snap.counts.total + '명 · 열일 ' + snap.counts.working + ' · 활동 ' + snap.counts.active + ' · 대기 ' + snap.counts.idle;
+    if (sub) {
+      sub.textContent = snap.counts.total + '명 · 열일 ' + snap.counts.working + ' · 활동 ' + snap.counts.active +
+        ' · 대기 ' + snap.counts.waiting + ' · 휴식 ' + snap.counts.idle;
+    }
     const lbl = $('#tabFilterLabel');
     if (lbl) lbl.textContent = '근무 현황';
   }
@@ -1241,14 +1933,16 @@
     body.innerHTML = '';
 
     const head = el('div', 'ss-head');
-    const av = el('div', 'ss-av', p.emoji || '🙂');
-    av.style.background = p.color || '#5B4BD6';
+    const animal = officeAnimal(p);
+    const av = el('div', 'ss-av');
+    av.style.background = 'linear-gradient(160deg, ' + mixHex(animal.fur, '#FFFFFF', 0.62) + ', ' + mixHex(animal.fur, '#FFFFFF', 0.3) + ')';
+    av.innerHTML = '<svg class="ss-pet" viewBox="40 -4 70 112" aria-hidden="true">' + petSvg(animal.kind, animal.fur, {}) + '</svg>';
     head.appendChild(av);
     const titles = el('div', 'ss-titles');
     const nm = el('b', '', p.name);
     nm.id = 'seatSheetName';
     titles.appendChild(nm);
-    titles.appendChild(el('span', '', p.role));
+    titles.appendChild(el('span', '', (animal.label ? animal.label + ' · ' : '') + p.role));
     head.appendChild(titles);
     const chip = el('span', 'ss-chip st-' + p.status, officeBadge(p, p.status));
     head.appendChild(chip);
@@ -1266,7 +1960,8 @@
       stats.appendChild(mk('total', snap.counts.total, '총 대원'));
       stats.appendChild(mk('working', snap.counts.working, '열일 중'));
       stats.appendChild(mk('active', snap.counts.active, '활동 중'));
-      stats.appendChild(mk('idle', snap.counts.idle, '대기 중'));
+      stats.appendChild(mk('waiting', snap.counts.waiting, '대기 중'));
+      stats.appendChild(mk('idle', snap.counts.idle, '휴식 중'));
       body.appendChild(stats);
       body.appendChild(el('h4', 'ss-h', '최근 소식'));
       const list = el('div', 'ss-recent');
@@ -1299,7 +1994,7 @@
       body.appendChild(el('h4', 'ss-h', '최근 시트 기록'));
       const list = el('div', 'ss-recent');
       if (!p.recent.length) list.appendChild(el('p', 'ss-empty', '아직 이 대원 이름으로 남은 기록이 없습니다.'));
-      p.recent.slice(0, 2).forEach(m => {
+      p.recent.slice(0, 3).forEach(m => {
         const rec = el('div', 'ss-rec');
         const top = el('div', 'ss-rec-top');
         top.appendChild(el('b', '', m.title || '(제목 없음)'));
