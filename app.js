@@ -572,6 +572,7 @@
     $('#msgSearch').value = '';
     state.view = room.kind === 'office' ? 'office' : 'chat';
     $('#app').dataset.view = state.view;
+    syncOfficeVisible();
     renderRooms();
     renderChatHead();
     if (state.view === 'office') renderOffice();
@@ -1193,6 +1194,7 @@
   function renderOffice() {
     const box = $('#office');
     if (!box) return;
+    box.hidden = false;
     const snap = officeSnapshot(officeMsgs());
     state.officeSnap = snap;
     box.innerHTML = '';
@@ -1299,6 +1301,12 @@
   function closeSeatSheet() {
     const bd = $('#seatSheetBackdrop');
     if (bd) bd.hidden = true;
+  }
+
+  // 오피스 패널은 [hidden] 으로도 감춰지므로 뷰에 맞춰 직접 켜고 끈다.
+  function syncOfficeVisible() {
+    const box = $('#office');
+    if (box) box.hidden = state.view !== 'office';
   }
 
   /* ───────── 새로고침/폴링 ───────── */
@@ -1968,6 +1976,7 @@
     $('#btnBack').addEventListener('click', () => {
       state.view = 'rooms';
       $('#app').dataset.view = 'rooms';
+      syncOfficeVisible();
       renderRooms();
     });
     $('#btnRefresh').addEventListener('click', () => refresh({ manual: true }));
@@ -2159,6 +2168,7 @@
     applyMode();
     if (state.view !== 'office' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
     $('#app').dataset.view = state.view;
+    syncOfficeVisible();
     bootstrapData();
     // 토큰이 없으면 빈 화면에 갇히므로 설정 창을 바로 열어 준다.
     if (window.SADAN_GAS_MODE && !state.config.token) {
