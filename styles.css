@@ -472,7 +472,12 @@ svg { display: block; }
   border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 214, 140, .24), rgba(255, 214, 140, 0));
   pointer-events: none;
 }
-.ceo-room { position: relative; display: flex; align-items: flex-end; justify-content: center; flex: 0 0 auto; }
+.ceo-room { position: relative; display: flex; align-items: flex-end; justify-content: center; flex: 0 0 auto; padding: 0 22px 4px; }
+/* 사장실 소품 — 화분 (장식, 누를 수 없음) */
+.ceo-plant {
+  position: absolute; left: 0; bottom: 6px; font-size: 24px; line-height: 1;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); pointer-events: none;
+}
 .ceo-board {
   position: relative; flex: 1 1 250px; min-width: 0; text-align: left; border-radius: 16px;
   padding: 12px 13px; background: rgba(255, 255, 255, .95); color: var(--ink);
@@ -657,7 +662,8 @@ svg { display: block; }
   .seat-desk { width: 62px; }
   .ofc-ceo { padding: 12px; gap: 10px; }
   .ceo-board { flex: 1 1 100%; }
-  .ceo-room { width: 100%; }
+  .ceo-room { width: 100%; padding: 0 18px 4px; }
+  .ceo-plant { left: 2px; bottom: 4px; font-size: 20px; }
   .ofc-leads-note { display: none; }
   .ofc-leads, .ofc-zone { padding: 10px; }
 }

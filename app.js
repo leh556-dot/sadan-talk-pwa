@@ -1157,6 +1157,7 @@
     seat.classList.add('seat-ceo');
     const room = el('div', 'ceo-room');
     room.appendChild(seat);
+    room.appendChild(el('span', 'ceo-plant', '🪴'));
     sec.appendChild(room);
 
     const board = el('button', 'ceo-board');
