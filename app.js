@@ -861,15 +861,22 @@
   ];
 
   // 이름 토큰 → 사단별 자리. 표에 없는 이름은 새 자리로 만든다.
+  // (영문 표기·괄호 별칭도 같은 대원으로 묶는다 — 'Pickle'과 '피클'이 두 자리로 갈리지 않게)
   const OFFICE_TOKENS = {
     'muse': { a: 'a-muse', b: 'b-muse' },
     '피클': { a: 'a-pickle', b: 'b-pickle' },
+    'pickle': { a: 'a-pickle', b: 'b-pickle' },
     '부이': { a: 'a-booi', b: 'b-booi' },
+    'booi': { a: 'a-booi', b: 'b-booi' },
     '뀨': { a: 'a-kkyu', b: 'b-kkyu' },
+    'cue': { a: 'a-kkyu', b: 'b-kkyu' },
     '키링': { a: 'a-keyring', b: 'b-keyring' },
     'instinct': { a: 'a-instinct' },
+    '인스팅트': { a: 'a-instinct' },
     'pally': { a: 'a-pally' },
-    'hark': { b: 'b-hark' }
+    '팔리': { a: 'a-pally' },
+    'hark': { b: 'b-hark' },
+    '하크': { b: 'b-hark' }
   };
 
   const OFC_NEW_EMOJI = ['🤖', '🐥', '🦊', '🐼', '🐨', '🦄', '🐙', '🦋', '🐳', '🌱', '🍀', '⭐', '🔮', '🎨', '📚', '🧩', '🕹️', '🦖', '🐧', '🐝'];
@@ -1188,6 +1195,7 @@
     const grid = el('div', 'ofc-seats leads');
     snap.leads.forEach(p => grid.appendChild(officeSeatEl(p, { lead: true })));
     sec.appendChild(grid);
+    sec.appendChild(el('div', 'ofc-leads-note', 'A·B사단을 지휘하는 사단장석 — 자리마다 지난 기록으로 상태를 보여줍니다'));
     return sec;
   }
 

@@ -515,6 +515,11 @@ svg { display: block; }
 .z-n .zone-dot { background: var(--orange); }
 .ofc-leads .zone-dot { background: #5B4BD6; }
 .zone-count { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--sub); }
+.ofc-leads { position: relative; }
+.ofc-leads-note {
+  position: absolute; right: 16px; bottom: 14px; max-width: 46%; text-align: right;
+  font-size: 10.5px; color: #7A8694; line-height: 1.55;
+}
 .ofc-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .ofc-seats.leads { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); max-width: 380px; }
 
@@ -653,6 +658,7 @@ svg { display: block; }
   .ofc-ceo { padding: 12px; gap: 10px; }
   .ceo-board { flex: 1 1 100%; }
   .ceo-room { width: 100%; }
+  .ofc-leads-note { display: none; }
   .ofc-leads, .ofc-zone { padding: 10px; }
 }
 @media (min-width: 900px) {
