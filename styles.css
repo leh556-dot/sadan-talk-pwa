@@ -655,20 +655,24 @@ svg { display: block; }
 /* ── 좌석 ── */
 .ofc-zone, .ofc-leads, .ofc-lounge { position: absolute; inset: 0; pointer-events: none; }
 .seat {
-  position: absolute; width: 152px; height: 190px; padding: 0; margin: 0; border: 0; background: none;
-  transform: translate(-50%, -86%); pointer-events: auto; border-radius: 16px; text-align: center;
+  position: absolute; width: 116px; height: 152px; padding: 0; margin: 0; border: 0; background: none;
+  transform: translate(-50%, -84%); pointer-events: auto; border-radius: 14px; text-align: center;
   transition: filter .16s ease;
+}
+.seat.bench {
+  width: 62px; height: 86px; transform: translate(-50%, -70%);
 }
 .seat:hover { filter: drop-shadow(0 10px 10px rgba(60, 40, 20, .22)); z-index: 900 !important; }
 .seat:focus-visible { outline: 2px solid #FEE500; outline-offset: 2px; }
 .seat-stage { position: absolute; inset: 0; display: block; }
 .seat-art { width: 100%; height: 100%; overflow: visible; }
 .seat-badge {
-  position: absolute; left: 50%; top: -12px; transform: translateX(-50%); z-index: 3;
-  padding: 2px 7px; border-radius: 9px; font-size: 9.5px; font-weight: 800; letter-spacing: -.2px;
-  background: rgba(255, 255, 255, .93); color: #6B7684; box-shadow: 0 2px 6px rgba(60, 40, 20, .14);
+  position: absolute; left: 50%; top: -22px; transform: translateX(-50%); z-index: 3;
+  padding: 1px 6px; border-radius: 8px; font-size: 8px; font-weight: 800; letter-spacing: -.2px;
+  background: rgba(255, 255, 255, .94); color: #6B7684; box-shadow: 0 2px 5px rgba(60, 40, 20, .13);
   white-space: nowrap;
 }
+.seat.bench .seat-badge { top: -18px; font-size: 7.5px; padding: 0 4px; }
 .seat.st-working .seat-badge { background: #FFE7D6; color: #C2410C; animation: ofcBadge 1.8s ease-in-out infinite; }
 .seat.st-active .seat-badge { background: #E7F0FF; color: #1B64CB; }
 .seat.st-waiting .seat-badge { background: #EEF3F8; color: #5A6B80; }
@@ -676,13 +680,16 @@ svg { display: block; }
 .seat.ceo .seat-badge { background: #FFF1C9; color: #8A5A12; }
 
 .seat-plate {
-  position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); z-index: 3;
-  display: flex; flex-direction: column; align-items: center; max-width: 134px;
-  padding: 2px 8px; border-radius: 8px; background: rgba(255, 255, 255, .88);
-  box-shadow: 0 2px 7px rgba(70, 50, 30, .13);
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 3;
+  display: flex; flex-direction: column; align-items: center; max-width: 98px;
+  padding: 1px 6px 2px; border-radius: 7px; background: rgba(255, 255, 255, .9);
+  box-shadow: 0 2px 6px rgba(70, 50, 30, .12);
 }
-.seat-plate b { font-size: 11px; font-weight: 800; letter-spacing: -.2px; color: #46352A; white-space: nowrap; }
-.seat-plate i { font-size: 8.5px; font-style: normal; color: #8C7A68; white-space: nowrap; }
+.seat-plate b { font-size: 9.5px; font-weight: 800; letter-spacing: -.3px; color: #46352A; white-space: nowrap; }
+.seat-plate i { font-size: 7px; font-style: normal; color: #8C7A68; white-space: nowrap; }
+.seat.bench .seat-plate { bottom: -2px; padding: 0 4px; max-width: 70px; }
+.seat.bench .seat-plate b { font-size: 8px; }
+.seat.bench .seat-plate i { display: none; }
 .seat.dyn .seat-plate { background: rgba(255, 249, 235, .94); }
 .seat.hl .seat-plate { box-shadow: 0 0 0 3px rgba(255, 196, 80, .9); }
 
@@ -703,9 +710,9 @@ svg { display: block; }
 .seat .type-spark circle:nth-child(3) { animation-delay: .5s; }
 .seat.away .seat-art { opacity: .98; }
 .seat-empty-tag {
-  position: absolute; left: 50%; top: 108px; transform: translateX(-50%);
-  font-size: 8.5px; font-weight: 800; color: #8C7A68; background: rgba(255, 255, 255, .78);
-  padding: 1px 5px; border-radius: 6px; white-space: nowrap;
+  position: absolute; left: 50%; top: 88px; transform: translateX(-50%);
+  font-size: 7px; font-weight: 800; color: #8C7A68; background: rgba(255, 255, 255, .8);
+  padding: 0 4px; border-radius: 5px; white-space: nowrap;
 }
 
 /* 봉제인형 모션 */
@@ -717,8 +724,8 @@ svg { display: block; }
 .seat.st-idle .pet { animation: petBreathe 3.8s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
 
 .pet-bubble {
-  position: absolute; right: -8px; top: 14px; z-index: 4; padding: 3px 7px; border-radius: 9px;
-  background: #fff; color: #5B4636; font-size: 10px; font-weight: 800; white-space: nowrap;
+  position: absolute; right: -10px; top: 16px; z-index: 4; padding: 2px 6px; border-radius: 8px;
+  background: #fff; color: #5B4636; font-size: 8.5px; font-weight: 800; white-space: nowrap;
   box-shadow: 0 3px 8px rgba(60, 40, 20, .18); animation: ofcBubble .3s ease-out;
 }
 .pet-bubble::after {
@@ -731,15 +738,15 @@ svg { display: block; }
 
 /* ── 라운지 ── */
 .lounge-pet {
-  position: absolute; width: 92px; height: 96px; padding: 0; border: 0; background: none;
-  transform: translate(-50%, -92%); pointer-events: auto;
+  position: absolute; width: 56px; height: 62px; padding: 0; border: 0; background: none;
+  transform: translate(-50%, -90%); pointer-events: auto;
 }
 .lounge-art { width: 100%; height: 100%; overflow: visible; }
 .lounge-pet:hover { filter: drop-shadow(0 8px 8px rgba(60, 40, 20, .22)); }
 .lounge-name {
-  position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
-  font-size: 9px; font-weight: 800; color: #6B5E8A; background: rgba(255, 255, 255, .82);
-  padding: 0 5px; border-radius: 6px; white-space: nowrap;
+  position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+  font-size: 7.5px; font-weight: 800; color: #6B5E8A; background: rgba(255, 255, 255, .84);
+  padding: 0 4px; border-radius: 5px; white-space: nowrap;
 }
 .lounge-pet.hl .lounge-name { box-shadow: 0 0 0 3px rgba(255, 196, 80, .9); }
 .zzz { position: absolute; right: 4px; top: -2px; display: flex; align-items: flex-end; gap: 1px; }

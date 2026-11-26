@@ -860,9 +860,9 @@
 
   // 등각(2:1) 좌표 — 타일 한 칸 = 가로 64px · 세로 32px
   const OFC_TW = 64, OFC_TH = 32;
-  const OFC_GW = 16, OFC_GH = 14;
-  const OFC_SCENE_W = 1040, OFC_SCENE_H = 820;
-  const OFC_OX = 520, OFC_OY = 262;
+  const OFC_GW = 17, OFC_GH = 15;
+  const OFC_SCENE_W = 1160, OFC_SCENE_H = 870;
+  const OFC_OX = 560, OFC_OY = 300;
   const OFC_WALL_H = 214;
 
   function iso(gx, gy) {
@@ -1344,21 +1344,24 @@
 
   /* ── 자리 배치 (등각 격자 좌표) ── */
   const OFC_SLOTS = {
-    ceo: [[3.0, 2.15]],
-    leads: [[11.4, 2.05], [13.6, 2.05]],
-    a: [[0.9, 5.3], [3.3, 5.3], [5.7, 5.3], [0.9, 7.5], [3.3, 7.5], [5.7, 7.5]],
-    b: [[10.3, 5.3], [12.7, 5.3], [15.1, 5.3], [10.3, 7.5], [12.7, 7.5]],
-    n: [[3.9, 11.6], [5.9, 11.6], [2.7, 11.6], [3.0, 13.0], [5.0, 13.0]]
+    ceo: [[2.8, 2.2]],
+    leads: [[12.6, 2.2], [15.4, 2.2]],
+    a: [[1.3, 6.2], [4.1, 6.2], [1.3, 8.6], [4.1, 8.6], [1.3, 11.0], [4.1, 11.0]],
+    b: [[12.3, 6.2], [15.0, 6.2], [12.3, 8.6], [15.0, 8.6], [12.3, 11.0], [15.0, 11.0]],
+    n: [[3.2, 13.5], [4.9, 13.5], [6.6, 13.5], [8.3, 13.5], [10.0, 13.5]]
   };
   const OFC_EXTRA_SLOTS = {
-    a: [[0.9, 9.7], [2.7, 9.7], [0.9, 11.6], [2.7, 11.6]],
-    b: [[13.5, 9.7], [15.1, 9.7], [13.5, 11.6], [15.1, 11.6]],
-    leads: [[15.4, 3.1]],
-    n: [[1.2, 13.0], [5.9, 13.0], [7.3, 13.0]],
-    ceo: [[4.6, 3.1]]
+    a: [[1.3, 12.5], [4.1, 12.5]],
+    b: [[12.3, 12.5], [15.0, 12.5]],
+    leads: [[16.4, 3.3]],
+    n: [[11.7, 13.5], [2.2, 14.3], [4.4, 14.3]],
+    ceo: [[5.2, 3.2]]
   };
-  // 라운지 소파 자리 — idle 대원이 여기로 이동한다
-  const OFC_LOUNGE_SLOTS = [[7.0, 5.65], [7.62, 5.65], [8.24, 5.65], [7.0, 7.85], [7.62, 7.85], [8.24, 7.85], [6.6, 9.4], [9.4, 9.4]];
+  // 라운지 자리 — 소파 2개(각 2석) + 바닥 쿠션 6개
+  const OFC_LOUNGE_SLOTS = [
+    [7.15, 6.5], [8.65, 6.5], [7.15, 8.3], [8.65, 8.3],
+    [7.4, 10.05], [8.9, 10.05], [10.4, 10.05], [7.4, 11.55], [8.9, 11.55], [10.4, 11.55]
+  ];
 
   function officeSeatSlots(snap) {
     const map = new Map();
@@ -1435,19 +1438,23 @@
       isoPoly([isoP(0, 0, 0), isoP(0, OFC_GH, 0), isoP(0, OFC_GH, OFC_WALL_H), isoP(0, 0, OFC_WALL_H)], 'wall-face-2') +
       isoPoly([isoP(0, 0, 0), isoP(0, OFC_GH, 0), isoP(0, OFC_GH, 30), isoP(0, 0, 30)], 'wall-skirting') +
       isoPoly([isoP(0, 0, OFC_WALL_H), isoP(0, OFC_GH, OFC_WALL_H), isoP(0, OFC_GH, OFC_WALL_H + 9), isoP(0, 0, OFC_WALL_H + 9)], 'wall-cap') +
+      // 서쪽 벽 창문 (같은 방식으로 벽면에 그린다)
+      isoPoly([isoP(0, 5.0, 100), isoP(0, 7.4, 100), isoP(0, 7.4, 190), isoP(0, 5.0, 190)], 'win-frame') +
+      isoPoly([isoP(0, 5.1, 106), isoP(0, 7.3, 106), isoP(0, 7.3, 184), isoP(0, 5.1, 184)], 'win-glass') +
+      isoPoly([isoP(0, 6.15, 106), isoP(0, 6.25, 106), isoP(0, 6.25, 184), isoP(0, 6.15, 184)], 'win-bar') +
       '</g>';
 
     // 창문·시계·화이트보드
-    s += wallWinN(1.9, 4.3, 96, 188);
-    s += wallWinN(9.9, 13.1, 96, 188);
-    const ck = iso(5.3, 0);
-    s += '<g class="wall-clock"><circle cx="' + ck[0].toFixed(1) + '" cy="' + (ck[1] - 158).toFixed(1) + '" r="26" fill="var(--f-white)" stroke="var(--f-wood-face)" stroke-width="5"/>' +
-      '<path d="M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' v-12 M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' h9" stroke="#6B5A48" stroke-width="3" stroke-linecap="round"/></g>';
+    s += wallWinN(1.8, 4.2, 96, 188);
+    s += wallWinN(9.0, 11.8, 96, 188);
+    const ck = iso(6.4, 0);
+    s += '<g class="wall-clock"><circle cx="' + ck[0].toFixed(1) + '" cy="' + (ck[1] - 158).toFixed(1) + '" r="24" fill="var(--f-white)" stroke="var(--f-wood-face)" stroke-width="5"/>' +
+      '<path d="M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' v-11 M' + ck[0].toFixed(1) + ' ' + (ck[1] - 158).toFixed(1) + ' h8" stroke="#6B5A48" stroke-width="3" stroke-linecap="round"/></g>';
     // 화이트보드 (북쪽 벽, 팀장실 위)
-    const wb1 = iso(6.2, 0), wb2 = iso(8.6, 0);
+    const wb1 = iso(12.7, 0), wb2 = iso(15.5, 0);
     s += '<g class="whiteboard">' +
-      isoPoly([isoP(6.1, 0, 64), isoP(8.7, 0, 64), isoP(8.7, 0, 158), isoP(6.1, 0, 158)], 'wb-frame') +
-      isoPoly([isoP(6.18, 0, 70), isoP(8.62, 0, 70), isoP(8.62, 0, 152), isoP(6.18, 0, 152)], 'wb-face') +
+      isoPoly([isoP(12.6, 0, 64), isoP(15.6, 0, 64), isoP(15.6, 0, 158), isoP(12.6, 0, 158)], 'wb-frame') +
+      isoPoly([isoP(12.68, 0, 70), isoP(15.52, 0, 70), isoP(15.52, 0, 152), isoP(12.68, 0, 152)], 'wb-face') +
       '<g transform="translate(' + ((wb1[0] + wb2[0]) / 2 - 26).toFixed(1) + ',' + (((wb1[1] + wb2[1]) / 2) - 124).toFixed(1) + ') rotate(26.57)">' +
       '<text class="wb-title" x="0" y="0" font-size="24" font-weight="800">TEAM</text>' +
       '<path d="M2 8 h62" stroke="#8FB7E8" stroke-width="3" stroke-linecap="round"/>' +
@@ -1468,65 +1475,77 @@
     s += '</g>';
 
     // 구역 러그
-    s += rug(0.35, 4.35, 6.75, 10.45, 'rug-a');
-    s += rug(9.25, 4.35, 15.65, 10.45, 'rug-b');
-    s += rug(6.6, 4.6, 8.9, 10.3, 'rug-lounge');
-    s += rug(0.4, 0.4, 5.6, 3.9, 'rug-ceo');
-    s += rug(10.2, 0.4, 15.6, 3.9, 'rug-leads');
-    s += rug(1.0, 10.7, 6.6, 13.6, 'rug-new');
+    s += rug(0.35, 5.15, 6.05, 12.0, 'rug-a');
+    s += rug(11.65, 5.15, 16.6, 12.0, 'rug-b');
+    s += rug(6.2, 5.15, 11.45, 12.25, 'rug-lounge');
+    s += rug(0.35, 0.35, 6.25, 4.15, 'rug-ceo');
+    s += rug(11.55, 0.35, 16.65, 4.15, 'rug-leads');
+    s += rug(1.5, 12.55, 11.55, 14.45, 'rug-new');
 
     // 구역 이름
-    s += floorLabel(3.0, 3.5, 'CEO ROOM', 'fl-ceo');
-    s += floorLabel(12.8, 3.5, 'LEADS', 'fl-leads');
-    s += floorLabel(3.4, 10.1, 'A사단 존', 'fl-a');
-    s += floorLabel(12.4, 10.1, 'B사단 존', 'fl-b');
-    s += floorLabel(3.8, 13.2, '새로 합류', 'fl-n');
-    s += floorLabel(7.6, 9.9, 'LOUNGE', 'fl-lounge');
+    s += floorLabel(3.1, 3.85, 'CEO ROOM', 'fl-ceo');
+    s += floorLabel(14.2, 3.85, 'LEADS', 'fl-leads');
+    s += floorLabel(3.1, 5.0, 'A사단 존', 'fl-a');
+    s += floorLabel(14.1, 5.0, 'B사단 존', 'fl-b');
+    s += floorLabel(6.4, 12.1, '새로 합류', 'fl-n');
+    s += floorLabel(8.8, 12.3, 'LOUNGE', 'fl-lounge');
 
     // 햇살 (창문 아래로 비스듬히)
     s += '<g class="beams">' +
-      isoPoly([isoP(2.0, 0, 94), isoP(4.2, 0, 94), isoP(5.9, 3.4, 0), isoP(3.7, 3.4, 0)], 'beam') +
-      isoPoly([isoP(10.0, 0, 94), isoP(13.0, 0, 94), isoP(14.7, 3.4, 0), isoP(11.7, 3.4, 0)], 'beam') +
+      isoPoly([isoP(1.9, 0, 94), isoP(4.1, 0, 94), isoP(5.9, 3.2, 0), isoP(3.7, 3.2, 0)], 'beam') +
+      isoPoly([isoP(9.1, 0, 94), isoP(11.7, 0, 94), isoP(13.5, 3.2, 0), isoP(10.9, 3.2, 0)], 'beam') +
       '</g>';
 
     // 가구 — 뒤쪽(벽)부터 앞쪽 순서로
     s += '<g class="furn">';
-    s += box3d(0.55, 0.1, 1.5, 0.5, 108, 'wood2', 'bookshelf');
-    // 책등
-    for (let i = 0; i < 6; i++) {
-      s += '<rect class="book b' + (i % 5) + '" x="' + (43 + i * 13).toFixed(1) + '" y="' + (iso(0.7, 0.6)[1] - 92 + (i % 2) * 4).toFixed(1) + '" width="9" height="' + (34 - (i % 3) * 5) + '" rx="1.5"/>';
+    s += box3d(0.55, 0.1, 1.4, 0.45, 104, 'wood2', 'bookshelf');
+    // 책장 앞면의 책등 (사장실 뒤편)
+    const bs = iso(1.1, 0.55);
+    for (let i = 0; i < 5; i++) {
+      s += '<rect class="book b' + (i % 5) + '" x="' + (bs[0] - 19 + i * 8).toFixed(1) + '" y="' + (bs[1] - 84 + (i % 2) * 3).toFixed(1) + '" width="6" height="' + (30 - (i % 3) * 5) + '" rx="1.4"/>';
     }
-    s += box3d(8.05, 0.1, 0.6, 0.45, 92, 'metal', 'coffee');   // 커피머신
-    s += box3d(14.2, 0.1, 0.8, 0.5, 126, 'metal', 'vending');   // 자판기
-    s += '<rect class="vending-glass" x="' + (iso(14.7, 0.6)[0] - 15).toFixed(1) + '" y="' + (iso(14.7, 0.6)[1] - 108).toFixed(1) + '" width="26" height="54" rx="3"/>';
-    s += treePlant(15.3, 1.3, 1.05);
-    s += treePlant(0.5, 3.6, 0.9);
+    s += box3d(7.0, 0.1, 0.65, 0.45, 92, 'metal', 'coffee');   // 커피머신
+    s += box3d(15.9, 0.1, 0.8, 0.5, 126, 'metal', 'vending');   // 자판기
+    s += '<rect class="vending-glass" x="' + (iso(16.3, 0.6)[0] - 13).toFixed(1) + '" y="' + (iso(16.3, 0.6)[1] - 106).toFixed(1) + '" width="24" height="52" rx="3"/>';
+    s += treePlant(16.2, 1.2, 1.05);
+    s += treePlant(0.55, 4.35, 0.9);
 
     // 사장실 — 안락의자 + 협탁
-    s += box3d(4.5, 2.3, 0.8, 0.8, 22, 'fabric-light', 'armchair');
-    s += box3d(4.5, 2.05, 0.8, 0.22, 44, 'fabric-light', 'armchair-back');
-    s += box3d(4.55, 3.2, 0.6, 0.5, 20, 'wood', 'side-table');
+    s += box3d(4.85, 2.25, 0.85, 0.8, 20, 'fabric-light', 'armchair');
+    s += box3d(4.85, 2.05, 0.85, 0.22, 42, 'fabric-light', 'armchair-back');
+    s += box3d(4.9, 3.25, 0.6, 0.5, 18, 'wood', 'side-table');
 
-    // 라운지 — 소파 2개 · 커피 테이블 · 스탠드
-    s += sofa(6.7, 5.05, 2.1, 0.85);
-    s += sofa(6.7, 7.25, 2.1, 0.85);
-    s += box3d(7.35, 6.25, 0.95, 0.75, 17, 'wood', 'coffee-table');
-    s += '<ellipse class="cmug" cx="' + (iso(7.8, 6.7)[0] + 4).toFixed(1) + '" cy="' + (iso(7.8, 6.7)[1] - 20).toFixed(1) + '" rx="4" ry="2" fill="var(--f-white)"/>';
-    s += treePlant(8.7, 9.6, 0.95);
-    s += '<g class="floor-lamp"><line x1="' + iso(6.4, 4.7)[0] + '" y1="' + iso(6.4, 4.7)[1] + '" x2="' + iso(6.4, 4.7)[0] + '" y2="' + (iso(6.4, 4.7)[1] - 96) + '" stroke="var(--f-metal)" stroke-width="3"/>' +
-      '<path d="M' + (iso(6.4, 4.7)[0] - 16) + ' ' + (iso(6.4, 4.7)[1] - 96) + ' h32 l-7 -18 h-18 z" fill="var(--f-lamp)"/></g>';
+    // 라운지 — 소파 2개 · 커피 테이블 · 쿠션
+    s += sofa(6.55, 5.55, 2.65, 0.95);
+    s += sofa(6.55, 7.35, 2.65, 0.95);
+    s += box3d(9.55, 6.2, 1.15, 1.0, 17, 'wood', 'coffee-table');
+    s += '<ellipse class="cmug" cx="' + (iso(10.0, 6.7)[0] + 3).toFixed(1) + '" cy="' + (iso(10.0, 6.7)[1] - 20).toFixed(1) + '" rx="4" ry="2" fill="var(--f-white)"/>';
+    for (let i = 0; i < 6; i++) {
+      const c = OFC_LOUNGE_SLOTS[4 + i];
+      const q = iso(c[0], c[1]);
+      s += '<ellipse class="cushion" cx="' + q[0].toFixed(1) + '" cy="' + (q[1] - 6).toFixed(1) + '" rx="21" ry="10" fill="var(--f-fabric-light)"/>';
+    }
+    s += treePlant(10.7, 9.2, 0.95);
+    s += '<g class="floor-lamp"><line x1="' + iso(6.3, 5.0)[0] + '" y1="' + iso(6.3, 5.0)[1] + '" x2="' + iso(6.3, 5.0)[0] + '" y2="' + (iso(6.3, 5.0)[1] - 96) + '" stroke="var(--f-metal)" stroke-width="3"/>' +
+      '<path d="M' + (iso(6.3, 5.0)[0] - 16) + ' ' + (iso(6.3, 5.0)[1] - 96) + ' h32 l-7 -18 h-18 z" fill="var(--f-lamp)"/></g>';
+
+    // 새로 합류 — 긴 벤치
+    s += box3d(2.55, 13.35, 8.0, 0.55, 15, 'wood', 'bench');
+    s += box3d(2.55, 13.2, 8.0, 0.16, 34, 'wood2', 'bench-back');
+
     // 화분 몇 개
-    s += treePlant(6.2, 13.2, 0.85);
-    s += treePlant(15.4, 12.9, 0.9);
+    s += treePlant(6.0, 12.0, 0.85);
+    s += treePlant(11.9, 12.2, 0.85);
+    s += treePlant(16.3, 12.6, 0.9);
     s += treePlant(8.9, 12.9, 0.8);
     s += '</g>';
 
     // 파티션 (사장실·팀장실 유리벽)
     s += '<g class="partitions">';
-    s += box3d(0.4, 4.0, 3.2, 0.08, 84, 'glass');
-    s += box3d(5.5, 0.4, 0.08, 3.6, 84, 'glass');
-    s += box3d(10.3, 4.0, 5.3, 0.08, 84, 'glass');
-    s += box3d(9.9, 0.4, 0.08, 3.6, 84, 'glass');
+    s += box3d(0.4, 4.25, 3.2, 0.08, 84, 'glass');
+    s += box3d(6.0, 0.4, 0.08, 3.7, 84, 'glass');
+    s += box3d(11.6, 4.25, 4.2, 0.08, 84, 'glass');
+    s += box3d(11.5, 0.4, 0.08, 3.7, 84, 'glass');
     s += '</g>';
 
     // 벚꽃 잎 · 별 (테마별로 CSS가 켜고 끈다)
@@ -1558,8 +1577,10 @@
     opts = opts || {};
     const animal = officeAnimal(p);
     const away = officeAtLounge(p);
+    const bench = !!opts.bench;
     const b = el('button', 'seat st-' + p.status + ' animal-' + animal.kind +
-      (opts.ceo ? ' ceo' : '') + (opts.lead ? ' lead' : '') + (p.dyn ? ' dyn' : '') + (away ? ' away' : ''));
+      (opts.ceo ? ' ceo' : '') + (opts.lead ? ' lead' : '') + (p.dyn ? ' dyn' : '') +
+      (away ? ' away' : '') + (bench ? ' bench' : ''));
     b.type = 'button';
     b.dataset.mid = p.id;
     b.dataset.status = p.status;
@@ -1570,28 +1591,31 @@
     b.dataset.gx = String(slot[0]);
     b.dataset.gy = String(slot[1]);
     b.style.left = pos[0].toFixed(1) + 'px';
-    b.style.top = (pos[1] + 20).toFixed(1) + 'px';
+    b.style.top = (pos[1] + (bench ? 6 : 16)).toFixed(1) + 'px';
     b.style.zIndex = String(120 + Math.round((slot[0] + slot[1]) * 8));
 
     b.appendChild(el('span', 'seat-badge', officeBadge(p, p.status)));
 
     const stage = el('span', 'seat-stage');
-    stage.innerHTML = '<svg class="seat-art" viewBox="0 0 150 190" aria-hidden="true">' +
-      (away ? '' : petSvg(animal.kind, animal.fur, { sleep: p.status === 'idle', talk: p.status === 'working' })) +
-      deskSvg(p, animal, opts) +
-      '</svg>';
-    if (!away) {
-      if (p.status === 'working') stage.appendChild(el('span', 'pet-bubble bubble-work', officeBubble(p)));
-      else if (p.status === 'active') stage.appendChild(el('span', 'pet-bubble bubble-active', '작성 중…'));
-      else if (p.status === 'waiting') stage.appendChild(el('span', 'pet-bubble bubble-wait', '☕'));
+    if (bench) {
+      stage.innerHTML = '<svg class="seat-art bench-art" viewBox="36 0 78 112" aria-hidden="true">' +
+        petSvg(animal.kind, animal.fur, { sleep: p.status === 'idle', talk: p.status === 'working' }) +
+        '</svg>';
     } else {
-      stage.appendChild(el('span', 'seat-empty-tag', '자리 비움'));
+      stage.innerHTML = '<svg class="seat-art" viewBox="0 0 150 190" aria-hidden="true">' +
+        (away ? '' : petSvg(animal.kind, animal.fur, { sleep: p.status === 'idle', talk: p.status === 'working' })) +
+        deskSvg(p, animal, opts) +
+        '</svg>';
     }
+    if (!bench && away) stage.appendChild(el('span', 'seat-empty-tag', '자리 비움'));
+    else if (!away && p.status === 'working') stage.appendChild(el('span', 'pet-bubble bubble-work', officeBubble(p)));
+    else if (!away && p.status === 'active') stage.appendChild(el('span', 'pet-bubble bubble-active', '작성 중…'));
+    else if (!away && p.status === 'waiting') stage.appendChild(el('span', 'pet-bubble bubble-wait', '☕'));
     b.appendChild(stage);
 
     const plate = el('span', 'seat-plate');
     plate.appendChild(el('b', '', p.name));
-    plate.appendChild(el('i', '', (animal.label ? animal.label + ' · ' : '') + p.role));
+    plate.appendChild(el('i', '', bench ? '새로 합류' : (animal.label ? animal.label + ' · ' : '') + p.role));
     b.appendChild(plate);
 
     b.addEventListener('click', () => openSeatSheet(p));
@@ -1614,7 +1638,7 @@
       n.dataset.gy = String(slot[1]);
       n.title = p.name + ' · 💤 휴식 중 (라운지)';
       n.style.left = pos[0].toFixed(1) + 'px';
-      n.style.top = (pos[1] + 6).toFixed(1) + 'px';
+      n.style.top = (pos[1] + 4).toFixed(1) + 'px';
       n.style.zIndex = String(118 + Math.round((slot[0] + slot[1]) * 8));
       n.innerHTML = '<svg class="lounge-art" viewBox="36 0 78 116" aria-hidden="true">' +
         petSvg(animal.kind, animal.fur, { sleep: true }) + '</svg>' +
@@ -1640,8 +1664,11 @@
   function fitOfficeView(vp) {
     if (!vp) return;
     const vw = vp.clientWidth || 0, vh = vp.clientHeight || 0;
-    const s = (vw > 80 && vh > 80) ? Math.min(vw / OFC_SCENE_W, vh / OFC_SCENE_H) : 1;
-    ofcView.fit = s;
+    const fit = (vw > 80 && vh > 80) ? Math.min(vw / OFC_SCENE_W, vh / OFC_SCENE_H) : 1;
+    let s = fit;
+    // 넓은 화면은 전체가 다 보이게, 좁은 화면은 조금 당겨서(최소 0.78) 캐릭터가 읽히게 시작한다.
+    if (vw >= 720 && fit < 0.78) s = 0.78;
+    ofcView.fit = fit;
     ofcView.scale = s;
     ofcView.x = (vw - OFC_SCENE_W * s) / 2;
     ofcView.y = (vh - OFC_SCENE_H * s) / 2;
@@ -1775,7 +1802,8 @@
       (list || []).forEach(p => z.appendChild(officeSeatEl(p, {
         slot: slots.get(p.id),
         ceo: p.id === 'ceo',
-        lead: !!p.lead
+        lead: !!p.lead,
+        bench: key === 'n'
       })));
       return z;
     };
