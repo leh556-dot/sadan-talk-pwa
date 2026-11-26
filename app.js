@@ -1003,6 +1003,7 @@
     });
 
     // 탭 목록에서도 새 AI 비서를 찾는다(아직 오피스가 읽는 탭에 글이 없어도 자리를 만들어 둔다).
+    // 기록이 아직 없는 탭 이름은 '새로 합류' 구역에 모아 둔다 — 진짜 사단원 자리를 적지 않게.
     ['b', 'a'].forEach(sk => {
       const tabs = (state.tabsAll && state.tabsAll[sk]) || [];
       tabs.forEach(t => {
@@ -1012,13 +1013,22 @@
         if (!r || typeof r === 'string' || !r.dyn) return;
         if (byId.has(r.id)) return;
         const p = {
-          id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: r.zone,
-          role: (r.zone === 'b' ? 'B사단' : r.zone === 'a' ? 'A사단' : '신규') + ' · 새로 합류',
-          dyn: true, count: 0, last: null, recent: []
+          id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: 'n', home: r.zone,
+          role: (r.zone === 'b' ? 'B사단' : 'A사단') + ' · 새로 합류',
+          dyn: true, tabOnly: true, count: 0, last: null, recent: []
         };
         byId.set(p.id, p);
         all.push(p);
       });
+    });
+
+    // 탭으로만 알던 비서가 실제로 기록을 남기면 그 사단 자리로 올린다.
+    all.forEach(p => {
+      if (p.tabOnly && p.count > 0) {
+        p.tabOnly = false;
+        p.zone = p.home || p.zone;
+        p.role = (p.zone === 'b' ? 'B사단' : p.zone === 'a' ? 'A사단' : '신규') + ' · 새로 합류';
+      }
     });
 
     all.forEach(p => {

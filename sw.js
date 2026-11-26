@@ -1,7 +1,7 @@
 /* 사단 통합 톡 — 서비스 워커 (앱 셸 오프라인 캐시)
  * 시트 API(Apps Script) 요청은 캐시하지 않습니다. 항상 네트워크.
  */
-const VERSION = 'sadan-talk-v5';
+const VERSION = 'sadan-talk-v6';
 const SHELL = [
   './',
   './index.html',
