@@ -520,8 +520,8 @@ svg { display: block; }
   position: absolute; right: 16px; bottom: 14px; max-width: 46%; text-align: right;
   font-size: 10.5px; color: #7A8694; line-height: 1.55;
 }
-.ofc-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
-.ofc-seats.leads { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); max-width: 380px; }
+.ofc-seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 104px)); justify-content: center; gap: 8px; }
+.ofc-seats.leads { grid-template-columns: repeat(auto-fit, minmax(112px, 124px)); justify-content: start; }
 
 /* 대원 자리 (책상 + 캐릭터) */
 .seat {
@@ -651,7 +651,7 @@ svg { display: block; }
   .modal-backdrop { align-items: flex-end; }
   .attach-menu { width: 200px; }
   .app[data-view="office"] .office { padding: 10px 10px calc(20px + var(--safe-b)); }
-  .ofc-seats { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 7px; }
+  .ofc-seats { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); justify-content: stretch; gap: 7px; }
   .seat-stage { width: 68px; height: 72px; }
   .seat-char-wrap { width: 46px; height: 51px; }
   .seat-desk { width: 62px; }
