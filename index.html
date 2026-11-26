@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#FEE500" />
+<meta name="description" content="A·B사단 시트 연동 카톡형 통합 채팅 — 지시와 보고를 한 화면에서" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="사단 톡" />
+<title>사단 통합 톡</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app" class="app" data-view="rooms">
+
+  <!-- ─────────── 좌측: 채팅방 목록 ─────────── -->
+  <aside class="sidebar" id="sidebar">
+    <header class="side-head">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3C6.9 3 3 6.2 3 10.2c0 2.3 1.2 4.3 3.2 5.6L5.6 19l3.5-1.9c.9.2 1.9.4 2.9.4 5.1 0 9-3.2 9-7.3S17.1 3 12 3z" fill="#191919"/><circle cx="8.5" cy="10.3" r="1.15" fill="#FEE500"/><circle cx="12" cy="10.3" r="1.15" fill="#FEE500"/><circle cx="15.5" cy="10.3" r="1.15" fill="#FEE500"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>사단 통합 톡</h1>
+          <p id="connState" class="conn demo">데모 모드</p>
+        </div>
+      </div>
+      <div class="side-actions">
+        <button class="icon-btn" id="btnInstall" title="앱 설치" hidden>
+          <svg viewBox="0 0 24 24"><path d="M12 3v10m0 0 4-4m-4 4-4-4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnSettings" title="설정">
+          <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.7-1.3-1.9-3.3-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.2 3H9.8l-.4 2.2A7.6 7.6 0 0 0 6.8 6.7l-2-.8-1.9 3.3 1.7 1.3a7.6 7.6 0 0 0 0 3l-1.7 1.3 1.9 3.3 2-.8a7.6 7.6 0 0 0 2.6 1.5l.4 2.2h4.4l.4-2.2a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.9-3.3-1.7-1.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="side-search">
+      <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="11" cy="11" r="6.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="roomSearch" type="search" placeholder="방·대원·탭 검색" autocomplete="off" />
+    </div>
+
+    <div class="room-list" id="roomList" role="list"></div>
+
+    <div class="side-foot">
+      <div class="mode-line">
+        <span id="modeText">데모 데이터로 둘러보는 중</span>
+        <button class="link-btn" id="btnModeToggle">연결하기</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─────────── 우측: 채팅방 ─────────── -->
+  <main class="chat" id="chat" aria-live="polite">
+    <header class="chat-head">
+      <button class="icon-btn back" id="btnBack" title="뒤로">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="chat-title">
+        <h2 id="chatName">전체 통합방</h2>
+        <p id="chatSub">A·B사단 주요 기록</p>
+      </div>
+      <div class="chat-actions">
+        <button class="icon-btn" id="btnSearch" title="대화 검색">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnRefresh" title="새로고침">
+          <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v4.5h-4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="btnMenu" title="방 설정">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="chat-toolbar">
+      <div class="chips" id="filters" role="tablist">
+        <button class="chip active" data-filter="all" role="tab">전체</button>
+        <button class="chip" data-filter="instruction" role="tab">지시 <b data-count="instruction">0</b></button>
+        <button class="chip" data-filter="report" role="tab">보고 <b data-count="report">0</b></button>
+        <button class="chip" data-filter="todo" role="tab">미완료 <b data-count="todo">0</b></button>
+      </div>
+      <button class="tab-filter" id="btnTabFilter">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span id="tabFilterLabel">주요 탭</span>
+      </button>
+    </div>
+
+    <div class="searchbar" id="searchBar" hidden>
+      <input id="msgSearch" type="search" placeholder="이 방의 대화에서 검색 (제목·내용·작성자)" autocomplete="off" />
+      <span id="searchCount" class="search-count"></span>
+      <button class="icon-btn small" id="btnSearchClose" title="검색 닫기">✕</button>
+    </div>
+
+    <div class="messages" id="messages" tabindex="0"></div>
+
+    <div class="jump-new" id="jumpNew" hidden>새 메시지 <span id="jumpCount">0</span></div>
+
+    <div class="composer" id="composer">
+      <div class="attach-pending" id="attachPending" hidden></div>
+      <div class="composer-targets">
+        <button class="target-chip" id="btnTargetSheet" title="기록할 시트·탭 선택">
+          <span class="dot b" id="targetDot"></span><span id="targetSheetLabel">B사단 · 시트1</span>
+        </button>
+        <button class="target-chip tag" id="btnTargetTag" title="대상 대원 태그">@전체</button>
+        <span class="target-warn" id="targetWarn" hidden>⚠ 표 형식 탭</span>
+        <span class="composer-hint" id="composerHint">Enter 전송 · Shift+Enter 줄바꿈</span>
+      </div>
+      <div class="composer-row">
+        <button class="attach-btn" id="attachBtn" type="button" title="사진·동영상·파일 첨부" aria-label="사진·동영상·파일 첨부">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+        <textarea id="input" rows="1" placeholder="지시를 입력하세요" enterkeyhint="send"></textarea>
+        <button class="send-btn" id="btnSend" title="전송">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 11.5 20 4l-7.5 16-2.2-6.3L4 11.5z" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <input type="file" id="fileMedia" accept="image/*,video/*" multiple hidden />
+      <input type="file" id="fileAny" multiple hidden />
+      <div class="attach-menu" id="attachMenu" role="menu" hidden>
+        <button class="attach-opt" type="button" data-kind="media" role="menuitem">
+          <span class="ico" aria-hidden="true">🖼️</span><span class="tx">사진 · 동영상</span>
+        </button>
+        <button class="attach-opt" type="button" data-kind="file" role="menuitem">
+          <span class="ico" aria-hidden="true">📎</span><span class="tx">파일</span>
+        </button>
+        <div class="attach-limit">파일당 15MB · 합계 20MB까지</div>
+      </div>
+      <div class="composer-status" id="composerStatus"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ─────────── 모달 ─────────── -->
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" id="modal" role="dialog" aria-modal="true">
+    <header class="modal-head">
+      <h3 id="modalTitle">설정</h3>
+      <button class="icon-btn small" id="modalClose" title="닫기">✕</button>
+    </header>
+    <div class="modal-body" id="modalBody"></div>
+    <footer class="modal-foot" id="modalFoot"></footer>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="demo/snapshot.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

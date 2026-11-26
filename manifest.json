@@ -1,0 +1,25 @@
+{
+  "name": "사단 통합 톡",
+  "short_name": "사단 톡",
+  "description": "A·B사단 시트에 쌓이는 지시와 보고를 카톡처럼 한 화면에서 보고, 지시는 시트 마지막 행에 바로 기록하는 앱",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#B1C5D6",
+  "theme_color": "#FEE500",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "전체 통합방", "short_name": "통합방", "url": "./index.html?room=all" },
+    { "name": "B사단 방", "short_name": "B사단", "url": "./index.html?room=b" },
+    { "name": "A사단 방", "short_name": "A사단", "url": "./index.html?room=a" }
+  ]
+}
