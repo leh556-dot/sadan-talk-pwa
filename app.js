@@ -135,7 +135,9 @@
     unread: {},
     pendingNew: 0,
     skin: loadStoredSkin(),     // 오피스 테마: day · sakura · night
-    officeSnap: null
+    officeSnap: null,
+    // 🔀 워크플로우 화면 상태 — 기간·검색어·선택한 노드
+    wf: { period: 'all', q: '', sel: null }
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -1982,6 +1984,711 @@
     openSeatSheet(p);
   }
 
+  /* ═════════ 🔀 사단 게시·출고 워크플로우 ═════════
+     왼쪽(A·B사단 AI 봇) → 가운데(업무 축) → 오른쪽(게시·출고 채널) 흐름을
+     A·B사단 시트 기록에서 자동으로 뽑아 노드·엣지로 그린다. */
+  const WF_HUBS = [
+    { id: 'blog', name: '블로그·카페·SNS', short: '블로그·SNS', emoji: '📝', color: '#3B82F6' },
+    { id: 'asset', name: '디지털 에셋·굿즈', short: '에셋·굿즈', emoji: '🛒', color: '#8B5CF6' },
+    { id: 'store', name: '스토어·제휴', short: '스토어·제휴', emoji: '🛍️', color: '#10B981' },
+    { id: 'campaign', name: '체험단·공모전', short: '체험단·공모전', emoji: '🎯', color: '#F59E0B' }
+  ];
+  const WF_CHANNELS = [
+    { id: 'naver', name: '네이버 블로그', emoji: '🟢', hub: 'blog', color: '#03C75A',
+      hosts: ['blog.naver.com'], keys: ['네이버 블로그', '네이버블로그', 'blog.naver', '실속템', '투데이리빙'] },
+    { id: 'tistory', name: '티스토리', emoji: '📔', hub: 'blog', color: '#F16541',
+      hosts: ['tistory.com'], keys: ['티스토리', 'tistory', 'everythingtopic'] },
+    { id: 'daangn', name: '당근 카페', emoji: '🥕', hub: 'blog', color: '#FF6F0F',
+      hosts: ['cafe.daangn.com', 'daangn.com'], keys: ['당근 카페', '당근카페', '당근'] },
+    { id: 'pinterest', name: '핀터레스트', emoji: '📌', hub: 'blog', color: '#E60023',
+      hosts: ['pinterest.'], keys: ['핀터레스트', '핀터', 'pinterest'] },
+    { id: 'instagram', name: '인스타그램', emoji: '📸', hub: 'blog', color: '#E1306C',
+      hosts: ['instagram.com', 'instagr.am'], keys: ['인스타그램', '인스타', '릴스', '카드뉴스'] },
+    { id: 'youtube', name: '유튜브·숏폼', emoji: '🎬', hub: 'blog', color: '#FF0033',
+      hosts: ['youtube.com', 'youtu.be'], keys: ['유튜브', 'youtube', '숏폼', '쇼츠'] },
+    { id: 'gumroad', name: 'Gumroad', emoji: '🛍', hub: 'asset', color: '#FF90E8',
+      hosts: ['gumroad.com'], keys: ['gumroad', '검로드'] },
+    { id: 'kofi', name: 'Ko-fi', emoji: '☕', hub: 'asset', color: '#FF5E5B',
+      hosts: ['ko-fi.com'], keys: ['ko-fi', 'kofi'] },
+    { id: 'payhip', name: 'Payhip', emoji: '💳', hub: 'asset', color: '#22A06B',
+      hosts: ['payhip.com'], keys: ['payhip', '페이힙'] },
+    { id: 'itchio', name: 'itch.io', emoji: '🎮', hub: 'asset', color: '#FA5C5C',
+      hosts: ['itch.io'], keys: ['itch.io', 'itchio'] },
+    { id: 'marpple', name: '마플샵', emoji: '👕', hub: 'asset', color: '#5B4BD6',
+      hosts: ['marpple.com', 'marpple.shop'], keys: ['마플샵', '마플', 'marpple'] },
+    { id: 'tooldi', name: '툴디', emoji: '🧰', hub: 'asset', color: '#0EA5E9',
+      hosts: ['tooldi.co.kr', 'tooldi.com'], keys: ['툴디', 'tooldi'] },
+    { id: 'littly', name: '리틀리', emoji: '🔗', hub: 'store', color: '#3B82F6',
+      hosts: ['litt.ly'], keys: ['리틀리', 'litt.ly', 'littly'] },
+    { id: 'smartstore', name: '스마트스토어', emoji: '🏬', hub: 'store', color: '#12B76A',
+      hosts: ['smartstore.naver.com'], keys: ['스마트스토어', '스피드고', 'smartstore'] },
+    { id: 'review', name: '체험단 플랫폼', emoji: '🎯', hub: 'campaign', color: '#F59E0B',
+      hosts: ['reviewnote.co.kr', 'revu.co.kr', 'reviews.kr'], keys: ['레뷰', '리뷰노트', '리뷰플레이스', '체험단', '29cm', '11번가'] }
+  ];
+  const WF_HUB_BY_ID = {};
+  WF_HUBS.forEach(h => { WF_HUB_BY_ID[h.id] = h; });
+  const WF_CHAN_BY_ID = {};
+  WF_CHANNELS.forEach(c => { WF_CHAN_BY_ID[c.id] = c; });
+  const WF_DEFAULT_W = 1000;
+  // '게시·출고'로 볼 신호 — 링크가 없어도 이 말이 있으면 올린 기록으로 본다.
+  const WF_SIGNAL = /\[(완료|출고|보고|발행|등록|업로드)\]|완료|출고|발행|업로드|게시|등록|심사\s*제출|제출|포스팅|공개/;
+
+  let wfHoverSel = null;
+
+  function wfSelRef(sel) {
+    if (!sel) return null;
+    const i = String(sel).indexOf(':');
+    if (i < 0) return null;
+    return { kind: sel.slice(0, i), id: sel.slice(i + 1) };
+  }
+
+  function wfUrls(text) {
+    return String(text || '').match(/https?:\/\/[^\s)\]"'<>]+/g) || [];
+  }
+
+  // 글에서 채널 하나를 고른다. 링크 주소가 가장 확실하고, 다음이 이름·키워드.
+  function wfChannelOf(text) {
+    const s = String(text || '');
+    const low = s.toLowerCase();
+    const urls = wfUrls(s);
+    for (let i = 0; i < urls.length; i++) {
+      const u = urls[i].toLowerCase();
+      for (let j = 0; j < WF_CHANNELS.length; j++) {
+        const c = WF_CHANNELS[j];
+        if (c.hosts.some(h => u.indexOf(h) >= 0)) return c;
+      }
+    }
+    for (let j = 0; j < WF_CHANNELS.length; j++) {
+      const c = WF_CHANNELS[j];
+      if (c.keys.some(k => low.indexOf(String(k).toLowerCase()) >= 0)) return c;
+    }
+    return null;
+  }
+
+  // 작성자 → 워크플로우 봇(오피스 명단과 같은 규칙으로 묶는다).
+  function wfBotOf(m) {
+    const r = officeResolve(m.author, m.sheet);
+    if (!r) return null;
+    if (typeof r === 'string') {
+      if (r === 'ceo') return null;
+      const f = OFFICE_FIXED.find(x => x.id === r);
+      if (!f) return null;
+      return { id: f.id, name: f.name, emoji: f.emoji, color: f.color, zone: f.zone, lead: !!f.lead };
+    }
+    return { id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: r.zone, lead: false };
+  }
+
+  function wfTitleOf(m) {
+    let t = String(m.title || '').replace(/\s+/g, ' ').trim();
+    t = t.replace(/^(\[(완료|출고 완료|출고|보고|등록|발행|업로드)\]\s*)+/g, '').trim();
+    if (!t) t = String(m.body || '').replace(/\s+/g, ' ').trim();
+    t = t.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
+    if (t.length > 46) t = t.slice(0, 46) + '…';
+    return t || '(제목 없음)';
+  }
+
+  // 시트 메시지 → { 봇, 채널, 제목, 링크, 시각 } 게시 기록
+  function wfParse(msgs) {
+    const out = [];
+    (msgs || []).forEach(m => {
+      if (!m || m.type === 'instruction') return;
+      const text = String(m.title || '') + '\n' + String(m.body || '') + '\n' + String(m.link || '');
+      const ch = wfChannelOf(text);
+      if (!ch) return;
+      const urls = wfUrls(text);
+      if (!urls.length && !WF_SIGNAL.test(text)) return;
+      const bot = wfBotOf(m);
+      if (!bot) return;
+      out.push({
+        key: m.key, botId: bot.id, botName: bot.name, botEmoji: bot.emoji, botColor: bot.color, zone: bot.zone,
+        channelId: ch.id, channelName: ch.name, hubId: ch.hub, url: urls[0] || '',
+        title: wfTitleOf(m), ts: m.ts || 0, sheet: m.sheet, tab: m.tab, row: m.row || 0
+      });
+    });
+    out.sort((a, b) => b.ts - a.ts);
+    return out;
+  }
+
+  function wfFilter(posts) {
+    const f = state.wf;
+    let out = posts;
+    if (f.period === 'today') {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      const s = d.getTime();
+      out = out.filter(p => p.ts >= s);
+    } else if (f.period === '24h') {
+      const s = Date.now() - 864e5;
+      out = out.filter(p => p.ts >= s);
+    }
+    const q = String(f.q || '').trim().toLowerCase();
+    if (q) {
+      out = out.filter(p => (p.title + ' ' + p.botName + ' ' + p.channelName + ' ' + p.tab).toLowerCase().indexOf(q) >= 0);
+    }
+    return out;
+  }
+
+  function wfModel(posts) {
+    const bots = [];
+    const botById = new Map();
+    const mkBot = meta => {
+      const b = {
+        id: meta.id, name: meta.name, emoji: meta.emoji, color: meta.color, zone: meta.zone,
+        lead: !!meta.lead, count: 0, last: 0, chans: new Map()
+      };
+      bots.push(b); botById.set(b.id, b); return b;
+    };
+    OFFICE_FIXED.forEach(m => { if (m.id !== 'ceo') mkBot(m); });
+
+    const chans = WF_CHANNELS.map(c => ({
+      id: c.id, name: c.name, emoji: c.emoji, hub: c.hub, color: c.color, count: 0, last: 0, bots: new Map()
+    }));
+    const chanById = new Map(chans.map(c => [c.id, c]));
+    const hubs = WF_HUBS.map(h => ({
+      id: h.id, name: h.name, short: h.short || h.name, emoji: h.emoji, color: h.color,
+      count: 0, bots: new Map(), chans: new Set()
+    }));
+    const hubById = new Map(hubs.map(h => [h.id, h]));
+
+    posts.forEach(p => {
+      let b = botById.get(p.botId);
+      if (!b) b = mkBot({ id: p.botId, name: p.botName, emoji: p.botEmoji, color: p.botColor, zone: p.zone });
+      b.count++;
+      if (p.ts > b.last) b.last = p.ts;
+      b.chans.set(p.channelId, (b.chans.get(p.channelId) || 0) + 1);
+
+      const c = chanById.get(p.channelId);
+      if (c) {
+        c.count++;
+        if (p.ts > c.last) c.last = p.ts;
+        c.bots.set(p.botId, (c.bots.get(p.botId) || 0) + 1);
+      }
+      const h = hubById.get(p.hubId);
+      if (h) {
+        h.count++;
+        h.bots.set(p.botId, (h.bots.get(p.botId) || 0) + 1);
+        h.chans.add(p.channelId);
+      }
+    });
+
+    const groups = [
+      { key: 'a', label: '🎭 A사단', bots: bots.filter(b => b.zone === 'a') },
+      { key: 'b', label: '🌿 B사단', bots: bots.filter(b => b.zone === 'b') },
+      { key: 'n', label: '✨ 새로 합류', bots: bots.filter(b => b.zone !== 'a' && b.zone !== 'b') }
+    ].filter(g => g.bots.length);
+
+    const edges = [];
+    bots.forEach(b => {
+      WF_HUBS.forEach(h => {
+        let n = 0;
+        b.chans.forEach((cnt, cid) => {
+          const c = chanById.get(cid);
+          if (c && c.hub === h.id) n += cnt;
+        });
+        if (n > 0) edges.push({ id: 'e:' + b.id + '>' + h.id, from: 'bot:' + b.id, to: 'hub:' + h.id, hub: h.id, count: n });
+      });
+    });
+    chans.forEach(c => {
+      if (c.count > 0) edges.push({ id: 'e:' + c.hub + '>' + c.id, from: 'hub:' + c.hub, to: 'chan:' + c.id, hub: c.hub, count: c.count });
+    });
+    const edgeIds = new Set(edges.map(e => e.id));
+
+    return { bots, botById, chans, chanById, hubs, hubById, groups, edges, edgeIds, posts };
+  }
+
+  // 좌표 계산 — 같은 숫자로 노드와 선을 함께 그려 반응형에서도 선이 어긋나지 않게 한다.
+  function wfLayout(model, width) {
+    const W = Math.max(300, Math.round(width || WF_DEFAULT_W));
+    const mobile = W < 620;
+    const pad = mobile ? 10 : 20;
+    const gap = mobile ? 12 : 36;
+    const inner = Math.max(220, W - pad * 2 - gap * 2);
+    const botW = Math.round(inner * (mobile ? 0.36 : 0.29));
+    const hubW = Math.round(inner * (mobile ? 0.26 : 0.29));
+    const chW = Math.max(80, inner - botW - hubW);
+    const botX = pad;
+    const hubX = pad + botW + gap;
+    const chX = hubX + hubW + gap;
+    const HEAD_H = mobile ? 18 : 22;
+    const BOT_H = mobile ? 32 : 40;
+    const BOT_GAP = mobile ? 5 : 7;
+    const CH_H = mobile ? 32 : 40;
+    const CH_GAP = mobile ? 5 : 6;
+    const HUB_H = mobile ? 46 : 54;
+    const nodes = new Map();
+    const push = (kind, id, x, y, w, h) => nodes.set(kind + ':' + id, { kind, id, x, y, w, h });
+
+    let y = pad;
+    const groupHeads = [];
+    model.groups.forEach(g => {
+      groupHeads.push({ x: botX, y: y, w: botW, label: g.label, n: g.bots.length });
+      y += HEAD_H;
+      g.bots.forEach(b => { push('bot', b.id, botX, y, botW, BOT_H); y += BOT_H + BOT_GAP; });
+      y += mobile ? 8 : 14;
+    });
+    const botsBottom = y;
+
+    let cy = pad;
+    model.hubs.forEach(h => {
+      const start = cy;
+      model.chans.filter(c => c.hub === h.id).forEach(c => {
+        push('chan', c.id, chX, cy, chW, CH_H);
+        cy += CH_H + CH_GAP;
+      });
+      const end = cy - CH_GAP;
+      push('hub', h.id, hubX, Math.round((start + end) / 2 - HUB_H / 2), hubW, HUB_H);
+      cy += mobile ? 10 : 16;
+    });
+    const chansBottom = cy - (mobile ? 10 : 16);
+    return { w: W, h: Math.max(220, Math.round(Math.max(botsBottom, chansBottom) + pad)), nodes, groupHeads, mobile };
+  }
+
+  // 같은 노드에서 나가거나 들어오는 선은 포트 높이를 조금씩 나눠 겹침을 줄인다.
+  function wfPortOffset(i, n, h) {
+    if (!n || n < 2) return 0;
+    const span = Math.min(28, h * 0.62);
+    return -span / 2 + (span / (n - 1)) * i;
+  }
+
+  function wfEdgePath(a, b, sy, ty) {
+    if (!a || !b) return '';
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2 + (sy || 0);
+    const x2 = b.x, y2 = b.y + b.h / 2 + (ty || 0);
+    const dx = Math.max(18, (x2 - x1) * 0.55);
+    const r = n => Math.round(n * 10) / 10;
+    return 'M' + r(x1) + ' ' + r(y1) + ' C' + r(x1 + dx) + ' ' + r(y1) + ', ' + r(x2 - dx) + ' ' + r(y2) + ', ' + r(x2) + ' ' + r(y2);
+  }
+
+  function wfSelect(kind, id) {
+    state.wf.sel = kind + ':' + id;
+    wfPaint();
+  }
+
+  function wfNodeEl(kind, item, box) {
+    const b = el('button', 'wf-node wf-' + kind + (item.count ? '' : ' wf-zero') +
+      (state.wf.sel === kind + ':' + item.id ? ' sel' : ''));
+    b.type = 'button';
+    b.dataset.kind = kind;
+    b.dataset.id = item.id;
+    b.style.left = box.x + 'px';
+    b.style.top = box.y + 'px';
+    b.style.width = box.w + 'px';
+    b.style.height = box.h + 'px';
+    b.style.setProperty('--wf-accent', item.color || '#94A3B8');
+    b.title = item.name + ' · ' + item.count + '건';
+    if (kind !== 'bot') b.setAttribute('aria-pressed', state.wf.sel === kind + ':' + item.id ? 'true' : 'false');
+    b.appendChild(el('i', 'wf-bar'));
+    b.appendChild(el('span', 'wf-emoji', item.emoji || '🤖'));
+    const meta = el('span', 'wf-meta');
+    meta.appendChild(el('b', 'wf-name', kind === 'hub' ? (item.short || item.name) : item.name));
+    let sub = '';
+    if (kind === 'bot') sub = item.lead ? '사단장' : (item.zone === 'a' ? 'A사단' : item.zone === 'b' ? 'B사단' : '새로 합류');
+    else if (kind === 'chan') sub = item.last ? officeAgo(item.last) : '기록 없음';
+    else sub = '봇 ' + item.bots.size + ' · 채널 ' + item.chans.size;
+    meta.appendChild(el('i', 'wf-nsub', sub));
+    b.appendChild(meta);
+    b.appendChild(el('span', 'wf-badge', String(item.count)));
+    return b;
+  }
+
+  function wfStat(label, n, cls) {
+    const s = el('div', 'wf-d-stat' + (cls ? ' ' + cls : ''));
+    s.appendChild(el('b', '', String(n)));
+    s.appendChild(el('i', '', label));
+    return s;
+  }
+
+  function wfBarRow(label, n, ratio, onPick) {
+    const row = el('button', 'wf-bar-row');
+    row.type = 'button';
+    row.addEventListener('click', onPick);
+    const top = el('div', 'wf-bar-top');
+    top.appendChild(el('b', '', label));
+    top.appendChild(el('span', '', n + '건'));
+    row.appendChild(top);
+    const track = el('div', 'wf-bar-track');
+    const fill = el('i', 'wf-bar-fill');
+    fill.style.width = Math.max(6, Math.round(ratio * 100)) + '%';
+    track.appendChild(fill);
+    row.appendChild(track);
+    return row;
+  }
+
+  function wfPostEl(p) {
+    const a = el('a', 'wf-post');
+    a.href = p.url || '#';
+    if (p.url) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    else a.addEventListener('click', ev => ev.preventDefault());
+    const top = el('div', 'wf-post-top');
+    top.appendChild(el('b', '', p.title));
+    top.appendChild(el('i', '', officeAgo(p.ts)));
+    a.appendChild(top);
+    const meta = el('div', 'wf-post-meta');
+    meta.appendChild(el('span', 'wf-tag', (p.botEmoji || '') + ' ' + p.botName));
+    const ch = WF_CHAN_BY_ID[p.channelId];
+    meta.appendChild(el('span', 'wf-tag', (ch ? ch.emoji : '') + ' ' + p.channelName));
+    if (p.row) meta.appendChild(el('span', 'wf-tag wf-plain', SHEETS[p.sheet].short + '·' + p.tab + ' ' + p.row + '행'));
+    a.appendChild(meta);
+    return a;
+  }
+
+  function wfDetail(box, model, posts) {
+    box.innerHTML = '';
+    const ref = wfSelRef(state.wf.sel);
+    const head = el('div', 'wf-d-head');
+    const addClear = () => {
+      const c = el('button', 'wf-d-clear', '✕');
+      c.type = 'button';
+      c.title = '선택 해제';
+      c.addEventListener('click', () => { state.wf.sel = null; wfPaint(); });
+      head.appendChild(c);
+    };
+
+    if (!ref) {
+      head.appendChild(el('span', 'wf-d-ico', '🧭'));
+      const t = el('div', 'wf-d-t');
+      t.appendChild(el('b', '', '전체 흐름'));
+      t.appendChild(el('i', '', '노드를 누르면 어디에 무엇을 올렸는지 보여요'));
+      head.appendChild(t);
+      box.appendChild(head);
+
+      const stats = el('div', 'wf-d-stats');
+      stats.appendChild(wfStat('게시·출고', posts.length, 'total'));
+      stats.appendChild(wfStat('봇', model.bots.filter(b => b.count > 0).length, 'bot'));
+      stats.appendChild(wfStat('채널', model.chans.filter(c => c.count > 0).length, 'chan'));
+      box.appendChild(stats);
+
+      const topChans = model.chans.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
+      if (topChans.length) {
+        box.appendChild(el('h4', 'wf-d-h', '많이 올린 채널'));
+        const max = topChans[0].count || 1;
+        topChans.forEach(c => box.appendChild(wfBarRow(c.emoji + ' ' + c.name, c.count, c.count / max, () => wfSelect('chan', c.id))));
+      }
+      box.appendChild(el('h4', 'wf-d-h', '최근 게시·출고'));
+      if (!posts.length) box.appendChild(el('p', 'wf-d-empty', '조건에 맞는 기록이 없습니다.'));
+      posts.slice(0, 6).forEach(p => box.appendChild(wfPostEl(p)));
+      if (posts.length > 6) box.appendChild(el('p', 'wf-d-more', '외 ' + (posts.length - 6) + '건 더 있어요'));
+      return;
+    }
+
+    if (ref.kind === 'bot') {
+      const b = wfBotMeta(model, ref.id);
+      const own = posts.filter(p => p.botId === ref.id);
+      head.appendChild(el('span', 'wf-d-ico', b ? b.emoji : '🤖'));
+      const t = el('div', 'wf-d-t');
+      t.appendChild(el('b', '', b ? b.name : ref.id));
+      t.appendChild(el('i', '', (b ? (b.lead ? '사단장' : (b.zone === 'a' ? 'A사단' : b.zone === 'b' ? 'B사단' : '새로 합류')) : '') + ' · 게시 ' + own.length + '건'));
+      head.appendChild(t);
+      addClear();
+      box.appendChild(head);
+      if (!own.length) {
+        box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 봇의 게시 기록이 없습니다.'));
+        return;
+      }
+      addBreakdown(box, model, own, 'chan', '어디에 올렸나');
+      addPosts(box, posts, p => p.botId === ref.id);
+      return;
+    }
+
+    if (ref.kind === 'chan') {
+      const c = model.chanById.get(ref.id);
+      const own = posts.filter(p => p.channelId === ref.id);
+      head.appendChild(el('span', 'wf-d-ico', c ? c.emoji : '🏁'));
+      const t = el('div', 'wf-d-t');
+      t.appendChild(el('b', '', c ? c.name : ref.id));
+      t.appendChild(el('i', '', (c ? (WF_HUB_BY_ID[c.hub] || {}).name : '') + ' · 게시 ' + own.length + '건'));
+      head.appendChild(t);
+      addClear();
+      box.appendChild(head);
+      if (!own.length) {
+        box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 채널의 게시 기록이 없습니다.'));
+        return;
+      }
+      addBreakdown(box, model, own, 'bot', '누가 올렸나');
+      addPosts(box, posts, p => p.channelId === ref.id);
+      return;
+    }
+
+    const h = model.hubById.get(ref.id);
+    const own = posts.filter(p => p.hubId === ref.id);
+    head.appendChild(el('span', 'wf-d-ico', h ? h.emoji : '🗂'));
+    const t = el('div', 'wf-d-t');
+    t.appendChild(el('b', '', h ? h.name : ref.id));
+    t.appendChild(el('i', '', '게시 ' + own.length + '건'));
+    head.appendChild(t);
+    addClear();
+    box.appendChild(head);
+    if (!own.length) {
+      box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 축의 기록이 없습니다.'));
+      return;
+    }
+    addBreakdown(box, model, own, 'chan', '어느 채널로 나갔나');
+    addPosts(box, posts, p => p.hubId === ref.id);
+  }
+
+  function wfBotMeta(model, id) {
+    return model.bots.find(b => b.id === id) || OFFICE_FIXED.find(b => b.id === id) || null;
+  }
+
+  // 상세 패널의 채널/봇별 건수 묶음 (누르면 그 노드로 이동)
+  function addBreakdown(box, model, own, by, label) {
+    const map = new Map();
+    own.forEach(p => {
+      const k = by === 'chan' ? p.channelId : p.botId;
+      map.set(k, (map.get(k) || 0) + 1);
+    });
+    const rows = [...map.entries()].sort((a, b) => b[1] - a[1]);
+    box.appendChild(el('h4', 'wf-d-h', label + ' · ' + rows.length + '곳'));
+    const max = rows[0] ? rows[0][1] : 1;
+    rows.forEach(r => {
+      const meta = by === 'chan' ? WF_CHAN_BY_ID[r[0]] : (model.botById.get(r[0]) || {});
+      const name = by === 'chan' ? (meta.name || r[0]) : (meta.name || r[0]);
+      const emoji = meta.emoji || '•';
+      box.appendChild(wfBarRow(emoji + ' ' + name, r[1], r[1] / max, () => wfSelect(by, r[0])));
+    });
+  }
+
+  function addPosts(box, posts, pred) {
+    const own = posts.filter(pred);
+    box.appendChild(el('h4', 'wf-d-h', '게시·출고 내역'));
+    own.slice(0, 12).forEach(p => box.appendChild(wfPostEl(p)));
+    if (own.length > 12) box.appendChild(el('p', 'wf-d-more', '외 ' + (own.length - 12) + '건 더 있어요'));
+    if (!own.length) box.appendChild(el('p', 'wf-d-empty', '기록이 없습니다.'));
+  }
+
+  function wfActiveSet(model, sel) {
+    const ref = wfSelRef(sel);
+    if (!ref) return null;
+    const nodes = new Set([ref.kind + ':' + ref.id]);
+    const edges = new Set();
+    // 엣지 id는 모델의 원래 id 규칙('e:보낸이>받는이')을 그대로 쓴다.
+    const edge = (from, to) => { const id = 'e:' + from + '>' + to; if (model.edgeIds.has(id)) edges.add(id); };
+
+    if (ref.kind === 'bot') {
+      const b = model.botById.get(ref.id);
+      if (!b) return { nodes, edges };
+      b.chans.forEach((n, cid) => {
+        const c = model.chanById.get(cid);
+        if (!c) return;
+        nodes.add('chan:' + cid);
+        nodes.add('hub:' + c.hub);
+        edge(b.id, c.hub);
+        edge(c.hub, cid);
+      });
+      return { nodes, edges };
+    }
+    if (ref.kind === 'chan') {
+      const c = model.chanById.get(ref.id);
+      if (!c) return { nodes, edges };
+      nodes.add('hub:' + c.hub);
+      edge(c.hub, c.id);
+      c.bots.forEach((n, bid) => {
+        nodes.add('bot:' + bid);
+        edge(bid, c.hub);
+      });
+      return { nodes, edges };
+    }
+    const h = model.hubById.get(ref.id);
+    if (!h) return { nodes, edges };
+    h.chans.forEach(cid => { nodes.add('chan:' + cid); edge(h.id, cid); });
+    h.bots.forEach((n, bid) => { nodes.add('bot:' + bid); edge(bid, h.id); });
+    return { nodes, edges };
+  }
+
+  function wfApplyFocus() {
+    const wrap = document.querySelector('#office .wf-wrap');
+    if (!wrap || !wrap.wfParts || !wrap.wfState) return;
+    const canvas = wrap.wfParts.canvas;
+    const set = wfActiveSet(wrap.wfState.model, wfHoverSel || state.wf.sel);
+    canvas.classList.toggle('wf-focus', !!set);
+    canvas.querySelectorAll('.wf-edge').forEach(p => {
+      p.classList.toggle('on', !!set && set.edges.has(p.getAttribute('data-eid')));
+    });
+    canvas.querySelectorAll('.wf-node').forEach(n => {
+      const key = n.dataset.kind + ':' + n.dataset.id;
+      const lit = !!set && set.nodes.has(key);
+      n.classList.toggle('dim', !!set && !lit);
+      n.classList.toggle('lit', lit);
+    });
+  }
+
+  function wfWrap() {
+    const wrap = el('section', 'wf-wrap');
+    wrap.setAttribute('aria-label', '사단 게시·출고 워크플로우');
+
+    const head = el('div', 'wf-head');
+    const title = el('div', 'wf-title');
+    title.appendChild(el('b', '', '🔀 사단 게시·출고 워크플로우'));
+    title.appendChild(el('span', '', '“누가 · 어디에 · 무엇을” 올렸는지 시트 기록에서 자동으로 이어 그립니다'));
+    head.appendChild(title);
+
+    const tools = el('div', 'wf-tools');
+    const seg = el('div', 'wf-seg');
+    [['all', '전체'], ['today', '오늘'], ['24h', '최근 24시간']].forEach(o => {
+      const b = el('button', 'wf-chip' + (state.wf.period === o[0] ? ' on' : ''), o[1]);
+      b.type = 'button';
+      b.dataset.period = o[0];
+      b.addEventListener('click', () => {
+        state.wf.period = o[0];
+        seg.querySelectorAll('.wf-chip').forEach(x => x.classList.toggle('on', x.dataset.period === o[0]));
+        wfPaint();
+      });
+      seg.appendChild(b);
+    });
+    tools.appendChild(seg);
+
+    const search = el('label', 'wf-search');
+    search.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="6.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    const inp = el('input');
+    inp.type = 'search';
+    inp.className = 'wf-q';
+    inp.placeholder = '봇·채널·제목 검색';
+    inp.value = state.wf.q || '';
+    inp.autocomplete = 'off';
+    inp.addEventListener('input', () => { state.wf.q = inp.value; wfPaint(); });
+    search.appendChild(inp);
+    tools.appendChild(search);
+
+    const reset = el('button', 'wf-reset', '↺ 전체 보기');
+    reset.type = 'button';
+    reset.addEventListener('click', () => {
+      state.wf.period = 'all';
+      state.wf.q = '';
+      state.wf.sel = null;
+      seg.querySelectorAll('.wf-chip').forEach(x => x.classList.toggle('on', x.dataset.period === 'all'));
+      inp.value = '';
+      wfPaint();
+    });
+    tools.appendChild(reset);
+    head.appendChild(tools);
+    wrap.appendChild(head);
+
+    const sub = el('div', 'wf-sub');
+    wrap.appendChild(sub);
+
+    const body = el('div', 'wf-body');
+    const canvas = el('div', 'wf-canvas');
+    canvas.setAttribute('role', 'group');
+    canvas.setAttribute('aria-label', '노드 워크플로우 캔버스');
+    const detail = el('aside', 'wf-detail');
+    detail.setAttribute('aria-live', 'polite');
+    body.appendChild(canvas);
+    body.appendChild(detail);
+    wrap.appendChild(body);
+
+    canvas.addEventListener('click', e => {
+      const n = e.target && e.target.closest ? e.target.closest('.wf-node') : null;
+      if (!n) return;
+      const key = n.dataset.kind + ':' + n.dataset.id;
+      state.wf.sel = state.wf.sel === key ? null : key;
+      wfPaint();
+    });
+    const hover = (e, on) => {
+      const n = e.target && e.target.closest ? e.target.closest('.wf-node') : null;
+      if (!n) return;
+      if (!on && e.relatedTarget && n.contains(e.relatedTarget)) return;
+      wfHoverSel = on ? n.dataset.kind + ':' + n.dataset.id : null;
+      wfApplyFocus();
+    };
+    canvas.addEventListener('mouseover', e => hover(e, true));
+    canvas.addEventListener('mouseout', e => hover(e, false));
+    canvas.addEventListener('focusin', e => hover(e, true));
+    canvas.addEventListener('focusout', e => hover(e, false));
+
+    wrap.wfParts = { canvas, detail, sub };
+    return wrap;
+  }
+
+  function wfPaint() {
+    const wrap = document.querySelector('#office .wf-wrap');
+    if (!wrap || !wrap.wfParts) return;
+    wfHoverSel = null;
+    const { canvas, detail, sub } = wrap.wfParts;
+    const all = wfParse(officeMsgs());
+    const posts = wfFilter(all);
+    const model = wfModel(posts);
+    const width = canvas.clientWidth || WF_DEFAULT_W;
+    const L = wfLayout(model, width);
+
+    const nBot = model.bots.filter(b => b.count > 0).length;
+    const nChan = model.chans.filter(c => c.count > 0).length;
+    sub.textContent = '게시·출고 ' + posts.length + '건 · 봇 ' + nBot + '곳 · 채널 ' + nChan + '곳' +
+      (state.wf.q ? ' · “' + state.wf.q + '” 검색' : '');
+
+    canvas.innerHTML = '';
+    canvas.style.height = L.h + 'px';
+    canvas.classList.toggle('wf-empty', posts.length === 0);
+    canvas.classList.toggle('wf-mobile', !!L.mobile);
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'wf-edges');
+    svg.setAttribute('viewBox', '0 0 ' + L.w + ' ' + L.h);
+    svg.setAttribute('width', String(L.w));
+    svg.setAttribute('height', String(L.h));
+    svg.setAttribute('aria-hidden', 'true');
+    const outMap = new Map();
+    const inMap = new Map();
+    model.edges.forEach(e => {
+      if (!outMap.has(e.from)) outMap.set(e.from, []);
+      outMap.get(e.from).push(e);
+      if (!inMap.has(e.to)) inMap.set(e.to, []);
+      inMap.get(e.to).push(e);
+    });
+    model.edges.forEach(e => {
+      const a = L.nodes.get(e.from);
+      const b = L.nodes.get(e.to);
+      if (!a || !b) return;
+      const outs = outMap.get(e.from);
+      const ins = inMap.get(e.to);
+      const sy = wfPortOffset(outs.indexOf(e), outs.length, a.h);
+      const ty = wfPortOffset(ins.indexOf(e), ins.length, b.h);
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('class', 'wf-edge');
+      p.setAttribute('data-eid', e.id);
+      p.setAttribute('data-hub', e.hub);
+      p.setAttribute('d', wfEdgePath(a, b, sy, ty));
+      p.setAttribute('stroke', (model.hubById.get(e.hub) || {}).color || '#C6CDD5');
+      p.setAttribute('stroke-width', String(Math.round((1 + Math.min(4, e.count) * 0.55) * 10) / 10));
+      svg.appendChild(p);
+    });
+    canvas.appendChild(svg);
+
+    L.groupHeads.forEach(g => {
+      const d = el('div', 'wf-group');
+      d.style.left = g.x + 'px';
+      d.style.top = g.y + 'px';
+      d.style.width = g.w + 'px';
+      d.appendChild(el('b', '', g.label));
+      d.appendChild(el('span', '', g.n + '명'));
+      canvas.appendChild(d);
+    });
+
+    model.bots.forEach(b => {
+      const box = L.nodes.get('bot:' + b.id);
+      if (box) canvas.appendChild(wfNodeEl('bot', b, box));
+    });
+    model.hubs.forEach(h => {
+      const box = L.nodes.get('hub:' + h.id);
+      if (box) canvas.appendChild(wfNodeEl('hub', h, box));
+    });
+    model.chans.forEach(c => {
+      const box = L.nodes.get('chan:' + c.id);
+      if (box) canvas.appendChild(wfNodeEl('chan', c, box));
+    });
+
+    if (!posts.length) {
+      const note = el('div', 'wf-empty-note');
+      note.appendChild(el('b', '', '아직 이어 그릴 게시·출고 기록이 없습니다'));
+      note.appendChild(el('span', '', '시트에 [완료]·발행·업로드·등록 같은 보고가 쌓이면 선이 자동으로 이어져요.'));
+      canvas.appendChild(note);
+    }
+
+    wrap.wfState = { model, L };
+    wfDetail(detail, model, posts);
+    wfApplyFocus();
+  }
+
   function renderOffice() {
     const box = $('#office');
     if (!box) return;
@@ -1990,7 +2697,12 @@
     state.officeSnap = snap;
     box.dataset.skin = state.skin || 'day';
     box.innerHTML = '';
-    box.appendChild(officeWrap(snap));
+    // 지도(.ofc-wrap) 아래에 🔀 게시·출고 워크플로우를 이어 붙인다.
+    const stack = el('div', 'ofc-stack');
+    stack.appendChild(officeWrap(snap));
+    stack.appendChild(wfWrap());
+    box.appendChild(stack);
+    wfPaint();
 
     const sub = $('#chatSub');
     if (sub) {
@@ -2874,6 +3586,13 @@
     $('#jumpNew').addEventListener('click', () => { $('#jumpNew').hidden = true; scrollToBottom(true); });
 
     window.addEventListener('online', () => api.isLive() && refresh({ silent: true }));
+    // 화면 폭이 바뀌면 워크플로우 노드·선을 같은 좌표로 다시 그린다(세로/가로 회전 포함).
+    let wfResizeTimer = null;
+    window.addEventListener('resize', () => {
+      if (state.view !== 'office') return;
+      clearTimeout(wfResizeTimer);
+      wfResizeTimer = setTimeout(() => { wfPaint(); }, 160);
+    });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && state.view === 'chat' && api.isLive()) refresh({ silent: true });
     });
