@@ -1437,6 +1437,7 @@
   }
 
   function officeSceneSvg(snap) {
+    const nCount = (snap && snap.zones && snap.zones.n) ? snap.zones.n.length : 0;
     let s = '<svg class="iso-scene" viewBox="0 0 ' + OFC_SCENE_W + ' ' + OFC_SCENE_H + '" aria-hidden="true">';
 
     // 벽 (뒤) — 북쪽 벽과 서쪽 벽
@@ -1491,14 +1492,14 @@
     s += rug(6.2, 5.15, 11.45, 12.25, 'rug-lounge');
     s += rug(0.35, 0.35, 6.25, 4.15, 'rug-ceo');
     s += rug(11.55, 0.35, 16.65, 4.15, 'rug-leads');
-    s += rug(1.5, 12.55, 11.55, 14.45, 'rug-new');
+    if (nCount) s += rug(1.6, 12.7, 10.9, 14.35, 'rug-new');
 
     // 구역 이름
     s += floorLabel(5.5, 1.0, 'CEO ROOM', 'fl-ceo');
     s += floorLabel(12.0, 1.0, 'LEADS', 'fl-leads');
     s += floorLabel(0.75, 12.5, 'A사단 존', 'fl-a');
     s += floorLabel(16.2, 12.4, 'B사단 존', 'fl-b');
-    s += floorLabel(4.8, 14.3, '새로 합류', 'fl-n');
+    if (nCount) s += floorLabel(4.8, 14.1, '새로 합류', 'fl-n');
     s += floorLabel(9.5, 12.9, 'LOUNGE', 'fl-lounge');
 
     // 햇살 (창문 아래로 비스듬히)
