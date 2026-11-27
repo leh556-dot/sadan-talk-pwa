@@ -145,8 +145,8 @@
     pendingNew: 0,
     skin: loadStoredSkin(),     // 오피스 테마: day · sakura · night
     officeSnap: null,
-    // 🔀 워크플로우 화면 상태 — 기간·검색어·선택한 노드
-    wf: { period: 'all', q: '', sel: null }
+    // 🔀 워크플로우 화면 상태 — 기간·검색어·선택한 노드·팬/줌
+    wf: { period: 'all', q: '', sel: null, view: null, open: false, fitted: false }
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -601,6 +601,7 @@
     $('#searchBar').hidden = true;
     $('#msgSearch').value = '';
     state.view = room.kind === 'office' ? 'office' : (room.kind === 'workflow' ? 'workflow' : 'chat');
+    if (state.view === 'workflow') state.wf.fitted = false;
     $('#app').dataset.view = state.view;
     syncOfficeVisible();
     renderRooms();
@@ -3093,7 +3094,8 @@
     box.innerHTML = '';
     if (!state.wf.view) state.wf.view = { x: 0, y: 0, s: 1 };
     box.appendChild(wfWrap());
-    wfPaint(true);
+    wfPaint(!state.wf.fitted);
+    state.wf.fitted = true;
     const lbl = $('#tabFilterLabel');
     if (lbl) lbl.textContent = '게시 흐름';
   }
@@ -3238,7 +3240,7 @@
       const box = $('#messages');
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
       if (isOffice) renderOffice();
-      else if (isWf) renderWorkflow();
+      else if (isWf) { if ($('#workflow .wf-wrap')) wfPaint(); else renderWorkflow(); }
       else renderMessages();
       renderRooms();
       if (added.length && !opts.silent) {
