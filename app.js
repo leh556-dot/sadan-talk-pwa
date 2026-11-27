@@ -2587,6 +2587,16 @@
     wrap.appendChild(body);
 
     canvas.addEventListener('click', e => {
+      const hitEdge = e.target && e.target.closest ? e.target.closest('.wf-edge-hit') : null;
+      if (hitEdge) {
+        const hub = hitEdge.getAttribute('data-hub');
+        if (hub) {
+          state.wf.sel = 'hub:' + hub;
+          wfPaint();
+          wfRevealDetail();
+        }
+        return;
+      }
       const n = e.target && e.target.closest ? e.target.closest('.wf-node') : null;
       if (!n) return;
       const key = n.dataset.kind + ':' + n.dataset.id;
@@ -2662,6 +2672,20 @@
       p.setAttribute('stroke', (model.hubById.get(e.hub) || {}).color || '#C6CDD5');
       p.setAttribute('stroke-width', String(Math.round((1 + Math.min(4, e.count) * 0.55) * 10) / 10));
       svg.appendChild(p);
+    });
+    // 보이는 선은 가늘어서 누르기 어렵다 → 같은 자리에 투명한 넓은 선을 겹쳐 둔다.
+    model.edges.forEach(e => {
+      const a = L.nodes.get(e.from);
+      const b = L.nodes.get(e.to);
+      if (!a || !b) return;
+      const outs = outMap.get(e.from);
+      const ins = inMap.get(e.to);
+      const hit = document.createElementNS(NS, 'path');
+      hit.setAttribute('class', 'wf-edge-hit');
+      hit.setAttribute('data-eid', e.id);
+      hit.setAttribute('data-hub', e.hub);
+      hit.setAttribute('d', wfEdgePath(a, b, wfPortOffset(outs.indexOf(e), outs.length, a.h), wfPortOffset(ins.indexOf(e), ins.length, b.h)));
+      svg.appendChild(hit);
     });
     canvas.appendChild(svg);
 

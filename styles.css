@@ -1150,3 +1150,8 @@ svg { display: block; }
 .wf-canvas.wf-mobile .wf-group b { font-size: 9px; }
 .wf-canvas.wf-mobile .wf-group span { font-size: 8px; }
 .wf-canvas.wf-mobile .wf-bar { top: 5px; bottom: 5px; }
+
+/* 연결선: 보이는 선은 장식, 누르는 것은 투명한 넓은 선(.wf-edge-hit) */
+.wf-edges { pointer-events: none; }
+.wf-edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.wf-canvas.wf-focus .wf-edge-hit { pointer-events: stroke; }

@@ -1,13 +1,13 @@
 /* 사단 통합 톡 — 서비스 워커 (앱 셸 오프라인 캐시)
  * 시트 API(Apps Script) 요청은 캐시하지 않습니다. 항상 네트워크.
  */
-const VERSION = 'sadan-talk-v18';
+const VERSION = 'sadan-talk-v19';
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=18',
-  './app.js?v=18',
-  './demo/snapshot.js?v=18',
+  './styles.css?v=19',
+  './app.js?v=19',
+  './demo/snapshot.js?v=19',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
