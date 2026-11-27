@@ -1436,7 +1436,7 @@
     return s;
   }
 
-  function officeSceneSvg() {
+  function officeSceneSvg(snap) {
     let s = '<svg class="iso-scene" viewBox="0 0 ' + OFC_SCENE_W + ' ' + OFC_SCENE_H + '" aria-hidden="true">';
 
     // 벽 (뒤) — 북쪽 벽과 서쪽 벽
@@ -1498,7 +1498,7 @@
     s += floorLabel(12.0, 1.0, 'LEADS', 'fl-leads');
     s += floorLabel(0.75, 12.5, 'A사단 존', 'fl-a');
     s += floorLabel(16.2, 12.4, 'B사단 존', 'fl-b');
-    s += floorLabel(2.2, 14.2, '새로 합류', 'fl-n');
+    s += floorLabel(4.8, 14.3, '새로 합류', 'fl-n');
     s += floorLabel(9.5, 12.9, 'LOUNGE', 'fl-lounge');
 
     // 햇살 (창문 아래로 비스듬히)
@@ -1562,10 +1562,6 @@
     s += '<ellipse class="meet-paper" cx="' + (mt[0] - 12).toFixed(1) + '" cy="' + (mt[1] - 20).toFixed(1) + '" rx="11" ry="5" fill="var(--f-white)"/>';
     s += '<circle class="meet-cup" cx="' + (mt[0] + 14).toFixed(1) + '" cy="' + (mt[1] - 18).toFixed(1) + '" r="4" fill="var(--f-white)"/>';
     s += treePlant(16.2, 13.4, 0.85);
-
-    // 새로 합류 — 긴 벤치
-    s += box3d(2.55, 13.35, 8.0, 0.55, 15, 'wood', 'bench');
-    s += box3d(2.55, 13.2, 8.0, 0.16, 34, 'wood2', 'bench-back');
 
     // 화분 몇 개
     s += treePlant(6.0, 12.0, 0.85);
@@ -1635,7 +1631,7 @@
     b.style.zIndex = String(120 + Math.round((slot[0] + slot[1]) * 8));
 
     const badge = el('span', 'seat-badge', officeBadge(p, p.status));
-    if (p.status === 'waiting' || (p.status === 'idle' && !away)) badge.classList.add('mini');
+    if (p.status !== 'working' && p.id !== 'ceo') badge.classList.add('mini');
     b.appendChild(badge);
 
     const stage = el('span', 'seat-stage');
@@ -1715,7 +1711,8 @@
     if (s < fit) s = fit;
     ofcView.fit = fit;
     ofcView.scale = s;
-    ofcView.x = (vw - OFC_SCENE_W * s) / 2;
+    // 장면 상자(빈 모서리 포함)가 아니라 방 바닥의 중심을 화면 가운데에 둔다
+    ofcView.x = vw / 2 - 532 * s;
     ofcView.y = (vh - OFC_SCENE_H * s) * 0.42;
     ofcView.touched = false;
     officeApplyTransform(document.querySelector('#office .iso-world'));
@@ -1841,7 +1838,7 @@
     world.style.width = OFC_SCENE_W + 'px';
     world.style.height = OFC_SCENE_H + 'px';
     world.dataset.scale = ofcView.scale.toFixed(3);
-    world.innerHTML = officeSceneSvg();
+    world.innerHTML = officeSceneSvg(snap);
 
     const slots = officeSeatSlots(snap);
     const mkZone = (key, list) => {
