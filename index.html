@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="styles.css?v=19" />
+<link rel="stylesheet" href="styles.css?v=20" />
 </head>
 <body>
 <div id="app" class="app" data-view="rooms">
@@ -99,6 +99,9 @@
     <!-- 🏢 사단 오피스 — 방 종류가 office 일 때 채팅 대신 이 화면이 펼쳐진다 -->
     <div class="office" id="office" hidden></div>
 
+    <!-- 🔀 사단 워크플로우 — 방 종류가 workflow 일 때 캔버스 + 속성 패널 -->
+    <div class="workflow" id="workflow" hidden></div>
+
     <div class="messages" id="messages" tabindex="0"></div>
 
     <div class="jump-new" id="jumpNew" hidden>새 메시지 <span id="jumpCount">0</span></div>
@@ -161,7 +164,7 @@
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="demo/snapshot.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="demo/snapshot.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

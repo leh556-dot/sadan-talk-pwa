@@ -55,6 +55,15 @@
         { sheet: 'b', tabs: B_TABS },
         { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
       ]
+    },
+    {
+      id: 'workflow', name: '사단 워크플로우', emoji: '🔀', color: '#6366F1',
+      desc: '누가 · 어디에 · 무엇을 올렸는지 게시·출고 흐름',
+      kind: 'workflow',
+      sources: [
+        { sheet: 'b', tabs: B_TABS },
+        { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
+      ]
     }
   ];
 
@@ -510,6 +519,9 @@
     msgs.sort((a, b) => a.ts - b.ts || String(a.row).localeCompare(String(b.row)));
     annotate(msgs);
     state.rooms[room.id] = { msgs, at: Date.now() };
+    // 오피스와 워크플로우는 같은 시트를 읽는다 — 한 번 받은 기록을 둘이 나눠 쓴다.
+    if (room.kind === 'office' && state.rooms.workflow) state.rooms.workflow = state.rooms.office;
+    if (room.kind === 'workflow') state.rooms.office = state.rooms.workflow;
     return msgs;
   }
 
@@ -540,13 +552,19 @@
       const top = el('div', 'room-top');
       top.appendChild(el('span', 'room-name', room.name));
       const ofc = room.kind === 'office' ? officeSnapshot(msgs) : null;
-      top.appendChild(el('span', 'room-count', ofc ? ofc.counts.total + '명' : `${msgs.length}건`));
+      const wfp = room.kind === 'workflow' && data ? wfParse(msgs) : null;
+      const wfModelMini = wfp ? wfModel(wfp) : null;
+      const nBot = wfModelMini ? wfModelMini.bots.filter(b => b.count > 0).length : 0;
+      const nChan = wfModelMini ? wfModelMini.chans.filter(c => c.count > 0).length : 0;
+      top.appendChild(el('span', 'room-count', ofc ? ofc.counts.total + '명' : (wfp ? wfp.length + '건' : `${msgs.length}건`)));
       top.appendChild(el('span', 'room-time', last ? fmtRoomTime(last.ts) : ''));
       body.appendChild(top);
 
       const prev = el('div', 'room-preview');
       if (ofc) {
         prev.appendChild(el('span', '', '열일 ' + ofc.counts.working + ' · 활동 ' + ofc.counts.active + ' · 대기 ' + ofc.counts.waiting + ' · 휴식 ' + ofc.counts.idle));
+      } else if (wfp) {
+        prev.appendChild(el('span', '', '게시·출고 ' + wfp.length + '건 · 봇 ' + nBot + ' · 채널 ' + nChan));
       } else if (last) {
         const tag = el('span', 'room-tabtag', (room.id === 'all' ? SHEETS[last.sheet].short + '·' : '') + last.tab);
         prev.appendChild(tag);
@@ -582,15 +600,16 @@
     state.searchOpen = false;
     $('#searchBar').hidden = true;
     $('#msgSearch').value = '';
-    state.view = room.kind === 'office' ? 'office' : 'chat';
+    state.view = room.kind === 'office' ? 'office' : (room.kind === 'workflow' ? 'workflow' : 'chat');
     $('#app').dataset.view = state.view;
     syncOfficeVisible();
     renderRooms();
     renderChatHead();
     if (state.view === 'office') renderOffice();
+    else if (state.view === 'workflow') renderWorkflow();
     else renderMessages();
     markSeen(id);
-    if (state.view !== 'office') scrollToBottom(true);
+    if (state.view === 'chat') scrollToBottom(true);
     if (api.isLive()) refresh({ silent: true });
   }
 
@@ -604,6 +623,11 @@
         ? s.counts.total + '명 · 열일 ' + s.counts.working + ' · 활동 ' + s.counts.active + ' · 대기 ' + s.counts.waiting + ' · 휴식 ' + s.counts.idle
         : room.desc;
       $('#tabFilterLabel').textContent = '근무 현황';
+      return;
+    }
+    if (room.kind === 'workflow') {
+      $('#chatSub').textContent = room.desc + ' — 시트 기록에서 자동으로';
+      $('#tabFilterLabel').textContent = '게시 흐름';
       return;
     }
     $('#chatSub').textContent = tabs ? `${tabs} 탭 · ${room.desc}` : room.desc;
@@ -1984,9 +2008,10 @@
     openSeatSheet(p);
   }
 
-  /* ═════════ 🔀 사단 게시·출고 워크플로우 ═════════
-     왼쪽(A·B사단 AI 봇) → 가운데(업무 축) → 오른쪽(게시·출고 채널) 흐름을
-     A·B사단 시트 기록에서 자동으로 뽑아 노드·엣지로 그린다. */
+  /* ═════════ 🔀 사단 워크플로우 ═════════
+     A·B사단 시트 기록에서 "누가(봇) · 어디로(게시 흐름) · 어디에(채널)"를 뽑아
+     캔버스에 그리고, 노드를 고르면 오른쪽 '속성 · 게시 내역' 패널에 그 내역을 펼친다.
+     한 행에 여러 플랫폼 링크가 있으면 그 채널들로 모두 나눠 잇는다. */
   const WF_HUBS = [
     { id: 'blog', name: '블로그·카페·SNS', short: '블로그·SNS', emoji: '📝', color: '#3B82F6' },
     { id: 'asset', name: '디지털 에셋·굿즈', short: '에셋·굿즈', emoji: '🛒', color: '#8B5CF6' },
@@ -2003,7 +2028,7 @@
     { id: 'pinterest', name: '핀터레스트', emoji: '📌', hub: 'blog', color: '#E60023',
       hosts: ['pinterest.'], keys: ['핀터레스트', '핀터', 'pinterest'] },
     { id: 'instagram', name: '인스타그램', emoji: '📸', hub: 'blog', color: '#E1306C',
-      hosts: ['instagram.com', 'instagr.am'], keys: ['인스타그램', '인스타', '릴스', '카드뉴스'] },
+      hosts: ['instagram.com', 'instagr.am'], keys: ['인스타그램', '인스타', '릴스'] },
     { id: 'youtube', name: '유튜브·숏폼', emoji: '🎬', hub: 'blog', color: '#FF0033',
       hosts: ['youtube.com', 'youtu.be'], keys: ['유튜브', 'youtube', '숏폼', '쇼츠'] },
     { id: 'gumroad', name: 'Gumroad', emoji: '🛍', hub: 'asset', color: '#FF90E8',
@@ -2023,15 +2048,30 @@
     { id: 'smartstore', name: '스마트스토어', emoji: '🏬', hub: 'store', color: '#12B76A',
       hosts: ['smartstore.naver.com'], keys: ['스마트스토어', '스피드고', 'smartstore'] },
     { id: 'review', name: '체험단 플랫폼', emoji: '🎯', hub: 'campaign', color: '#F59E0B',
-      hosts: ['reviewnote.co.kr', 'revu.co.kr', 'reviews.kr'], keys: ['레뷰', '리뷰노트', '리뷰플레이스', '체험단', '29cm', '11번가'] }
+      hosts: ['reviewnote.co.kr', 'revu.co.kr', 'reviews.kr', 'reviewplace.co.kr', '11st.co.kr', '29cm.co.kr'],
+      keys: ['레뷰', '리뷰노트', '리뷰플레이스', '체험단', '29cm', '11번가'] }
   ];
   const WF_HUB_BY_ID = {};
   WF_HUBS.forEach(h => { WF_HUB_BY_ID[h.id] = h; });
   const WF_CHAN_BY_ID = {};
   WF_CHANNELS.forEach(c => { WF_CHAN_BY_ID[c.id] = c; });
-  const WF_DEFAULT_W = 1000;
-  // '게시·출고'로 볼 신호 — 링크가 없어도 이 말이 있으면 올린 기록으로 본다.
-  const WF_SIGNAL = /\[(완료|출고|보고|발행|등록|업로드)\]|완료|출고|발행|업로드|게시|등록|심사\s*제출|제출|포스팅|공개/;
+
+  const WF_KIND_LABEL = { bot: 'BOT', hub: 'FLOW', chan: 'CHANNEL' };
+  // 제목에 이런 '올린 일' 동사가 있어야 게시·출고로 센다.
+  const WF_PUB = /발행|출고|업로드|등록|제출|공개|게시|포스팅|당첨|신청|심사|배포/;
+  // 지시·의뢰·알림 행은 '올린 일'이 아니다.
+  const WF_NOT_POST = /^\[(지시|공통\s*지시|긴급|라운|요청|공지|전달|Muse\s*전달|피클-B\s*요청|검수\s*요청|회신|답변|점검|알림|보고\s*요청)/;
+
+  // 캔버스 좌표 — 화면 폭과 무관한 고정 크기 세계를 그려 두고, 화면은 팬·줌으로 본다.
+  const WF_G = {
+    padX: 26, padY: 26, top: 60,
+    botW: 204, botH: 58, botGap: 10, groupHead: 26, groupGap: 26,
+    subGap: 16,
+    hubW: 190, hubH: 90,
+    chanW: 226, chanH: 46, chanGap: 9, hubSep: 34,
+    colGap: 88
+  };
+  const WF_ZOOM_MIN = 0.25, WF_ZOOM_MAX = 2;
 
   let wfHoverSel = null;
 
@@ -2046,26 +2086,32 @@
     return String(text || '').match(/https?:\/\/[^\s)\]"'<>]+/g) || [];
   }
 
-  // 글에서 채널 하나를 고른다. 링크 주소가 가장 확실하고, 다음이 이름·키워드.
-  function wfChannelOf(text) {
-    const s = String(text || '');
-    const low = s.toLowerCase();
-    const urls = wfUrls(s);
-    for (let i = 0; i < urls.length; i++) {
-      const u = urls[i].toLowerCase();
-      for (let j = 0; j < WF_CHANNELS.length; j++) {
-        const c = WF_CHANNELS[j];
-        if (c.hosts.some(h => u.indexOf(h) >= 0)) return c;
-      }
-    }
-    for (let j = 0; j < WF_CHANNELS.length; j++) {
-      const c = WF_CHANNELS[j];
-      if (c.keys.some(k => low.indexOf(String(k).toLowerCase()) >= 0)) return c;
-    }
-    return null;
+  // 제목·본문에서 '올린 곳'을 모두 찾는다.
+  //  · 링크 주소는 어느 플랫폼인지 가장 확실하다(제목 + 본문).
+  //  · 링크가 없는 행은 제목에 적힌 이름으로 찾는다(본문까지 훑으면 다른 플랫폼 이름이 섞인다).
+  function wfChannelsOf(title, body) {
+    const t = String(title || '');
+    const low = t.toLowerCase();
+    const out = [];
+    const seen = new Set();
+    const add = (c, url) => {
+      if (!c || seen.has(c.id)) return;
+      seen.add(c.id);
+      out.push({ ch: c, url: url || '' });
+    };
+    wfUrls(t + '\n' + String(body || '')).forEach(u => {
+      const ul = u.toLowerCase();
+      const c = WF_CHANNELS.find(x => x.hosts.some(h => ul.indexOf(h) >= 0));
+      if (c) add(c, u);
+    });
+    WF_CHANNELS.forEach(c => {
+      if (seen.has(c.id)) return;
+      if (c.keys.some(k => low.indexOf(String(k).toLowerCase()) >= 0)) add(c, '');
+    });
+    return out;
   }
 
-  // 작성자 → 워크플로우 봇(오피스 명단과 같은 규칙으로 묶는다).
+  // 작성자 → 워크플로우 봇(오피스 명단과 같은 규칙으로 묶는다. Pickle → 피클).
   function wfBotOf(m) {
     const r = officeResolve(m.author, m.sheet);
     if (!r) return null;
@@ -2078,35 +2124,56 @@
     return { id: r.id, name: r.name, emoji: r.emoji, color: r.color, zone: r.zone, lead: false };
   }
 
+  // 앞머리 꼬리표는 여러 개가 겹친다: '[이관] [완료] 티스토리 79호 발행'
+  const WF_MARK = /^\[([^\]]{1,26})\]\s*/;
+  const WF_MARK_WORDS = /완료|출고|이관|피클|서포트|전달|보고|검수|지시|공지|요청|부분|심사|발행|업로드|등록|제출|마감/;
   function wfTitleOf(m) {
     let t = String(m.title || '').replace(/\s+/g, ' ').trim();
-    t = t.replace(/^(\[(완료|출고 완료|출고|보고|등록|발행|업로드)\]\s*)+/g, '').trim();
+    for (let g = 0; g < 4; g++) {
+      const mm = t.match(WF_MARK);
+      if (!mm || !WF_MARK_WORDS.test(mm[1])) break;
+      t = t.slice(mm[0].length);
+    }
     if (!t) t = String(m.body || '').replace(/\s+/g, ' ').trim();
-    t = t.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
-    if (t.length > 46) t = t.slice(0, 46) + '…';
+    t = t.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').replace(/^[—\-–·:]\s*/, '').trim();
+    if (t.length > 56) t = t.slice(0, 56) + '…';
     return t || '(제목 없음)';
   }
 
-  // 시트 메시지 → { 봇, 채널, 제목, 링크, 시각 } 게시 기록
+  // 시트 메시지 → { 봇, 채널, 제목, 링크, 시각 } 게시 기록 (한 행이 여러 채널이면 여러 건)
   function wfParse(msgs) {
     const out = [];
     (msgs || []).forEach(m => {
       if (!m || m.type === 'instruction') return;
-      const text = String(m.title || '') + '\n' + String(m.body || '') + '\n' + String(m.link || '');
-      const ch = wfChannelOf(text);
-      if (!ch) return;
-      const urls = wfUrls(text);
-      if (!urls.length && !WF_SIGNAL.test(text)) return;
+      const raw = String(m.title || '').replace(/\s+/g, ' ').trim();
+      if (!raw || WF_NOT_POST.test(raw)) return;
+      if (!WF_PUB.test(raw)) return;
+      const chans = wfChannelsOf(raw, m.body);
+      if (!chans.length) return;
       const bot = wfBotOf(m);
       if (!bot) return;
-      out.push({
-        key: m.key, botId: bot.id, botName: bot.name, botEmoji: bot.emoji, botColor: bot.color, zone: bot.zone,
-        channelId: ch.id, channelName: ch.name, hubId: ch.hub, url: urls[0] || '',
-        title: wfTitleOf(m), ts: m.ts || 0, sheet: m.sheet, tab: m.tab, row: m.row || 0
+      const title = wfTitleOf(m);
+      chans.forEach(pair => {
+        out.push({
+          key: m.key + '|' + pair.ch.id,
+          botId: bot.id, botName: bot.name, botEmoji: bot.emoji, botColor: bot.color, zone: bot.zone, lead: bot.lead,
+          channelId: pair.ch.id, channelName: pair.ch.name, hubId: pair.ch.hub,
+          url: pair.url || wfUrls(m.body)[0] || '',
+          title, ts: m.ts || 0, sheet: m.sheet, tab: m.tab, row: m.row || 0,
+          multi: chans.length
+        });
       });
     });
-    out.sort((a, b) => b.ts - a.ts);
-    return out;
+    out.sort((a, b) => (b.ts - a.ts) || (b.row - a.row));
+    // A시트에 적힌 보고가 B시트로 '[이관]'되어 같은 일이 두 번 잡힌다.
+    // 같은 봇 · 같은 채널 · 같은 제목(앞부분)이면 하루 반 안의 것은 한 건으로 본다.
+    const seen = new Set();
+    return out.filter(p => {
+      const sig = p.botId + '|' + p.channelId + '|' + p.title.slice(0, 24);
+      const hit = seen.has(sig + '|' + Math.floor(p.ts / 36e5 / 36));
+      seen.add(sig + '|' + Math.floor(p.ts / 36e5 / 36));
+      return !hit;
+    });
   }
 
   function wfFilter(posts) {
@@ -2140,19 +2207,22 @@
     };
     OFFICE_FIXED.forEach(m => { if (m.id !== 'ceo') mkBot(m); });
 
-    const chans = WF_CHANNELS.map(c => ({
-      id: c.id, name: c.name, emoji: c.emoji, hub: c.hub, color: c.color, count: 0, last: 0, bots: new Map()
-    }));
-    const chanById = new Map(chans.map(c => [c.id, c]));
-    const hubs = WF_HUBS.map(h => ({
-      id: h.id, name: h.name, short: h.short || h.name, emoji: h.emoji, color: h.color,
-      count: 0, bots: new Map(), chans: new Set()
-    }));
-    const hubById = new Map(hubs.map(h => [h.id, h]));
+    const chans = [];
+    const chanById = new Map();
+    WF_CHANNELS.forEach(c => {
+      const o = { id: c.id, name: c.name, emoji: c.emoji, hub: c.hub, color: c.color, count: 0, last: 0, bots: new Map() };
+      chans.push(o); chanById.set(o.id, o);
+    });
+    const hubs = [];
+    const hubById = new Map();
+    WF_HUBS.forEach(h => {
+      const o = { id: h.id, name: h.name, short: h.short || h.name, emoji: h.emoji, color: h.color, count: 0, bots: new Map(), chans: new Set() };
+      hubs.push(o); hubById.set(o.id, o);
+    });
 
     posts.forEach(p => {
       let b = botById.get(p.botId);
-      if (!b) b = mkBot({ id: p.botId, name: p.botName, emoji: p.botEmoji, color: p.botColor, zone: p.zone });
+      if (!b) b = mkBot({ id: p.botId, name: p.botName, emoji: p.botEmoji, color: p.botColor, zone: p.zone, lead: p.lead });
       b.count++;
       if (p.ts > b.last) b.last = p.ts;
       b.chans.set(p.channelId, (b.chans.get(p.channelId) || 0) + 1);
@@ -2196,57 +2266,61 @@
     return { bots, botById, chans, chanById, hubs, hubById, groups, edges, edgeIds, posts };
   }
 
-  // 좌표 계산 — 같은 숫자로 노드와 선을 함께 그려 반응형에서도 선이 어긋나지 않게 한다.
-  function wfLayout(model, width) {
-    const W = Math.max(300, Math.round(width || WF_DEFAULT_W));
-    const mobile = W < 620;
-    const pad = mobile ? 10 : 20;
-    const gap = mobile ? 12 : 36;
-    const inner = Math.max(220, W - pad * 2 - gap * 2);
-    const botW = Math.round(inner * (mobile ? 0.36 : 0.29));
-    const hubW = Math.round(inner * (mobile ? 0.26 : 0.29));
-    const chW = Math.max(80, inner - botW - hubW);
-    const botX = pad;
-    const hubX = pad + botW + gap;
-    const chX = hubX + hubW + gap;
-    const HEAD_H = mobile ? 18 : 22;
-    const BOT_H = mobile ? 32 : 40;
-    const BOT_GAP = mobile ? 5 : 7;
-    const CH_H = mobile ? 32 : 40;
-    const CH_GAP = mobile ? 5 : 6;
-    const HUB_H = mobile ? 46 : 54;
+  /* ── 좌표 ──
+     봇은 두 열(A사단 / B사단·새로 합류)로 나눠 세로 길이를 줄이고,
+     가운데 게시 흐름은 오른쪽 채널 묶음의 세로 가운데에 놓는다.
+     칸 사이를 넉넉히 띄워 선이 지나갈 자리를 만든다. */
+  function wfLayout(model) {
+    const G = WF_G;
+    const xA = G.padX;
+    const xB = xA + G.botW + G.subGap;
+    const xHub = xB + G.botW + G.colGap;
+    const xCh = xHub + G.hubW + G.colGap;
     const nodes = new Map();
+    const groups = [];
     const push = (kind, id, x, y, w, h) => nodes.set(kind + ':' + id, { kind, id, x, y, w, h });
 
-    let y = pad;
-    const groupHeads = [];
+    let ya = G.top;
+    let yb = G.top;
     model.groups.forEach(g => {
-      groupHeads.push({ x: botX, y: y, w: botW, label: g.label, n: g.bots.length });
-      y += HEAD_H;
-      g.bots.forEach(b => { push('bot', b.id, botX, y, botW, BOT_H); y += BOT_H + BOT_GAP; });
-      y += mobile ? 8 : 14;
+      const left = g.key === 'a';
+      const x = left ? xA : xB;
+      let y = left ? ya : yb;
+      groups.push({ x, y, w: G.botW, label: g.label, n: g.bots.length });
+      y += G.groupHead;
+      g.bots.forEach(b => { push('bot', b.id, x, y, G.botW, G.botH); y += G.botH + G.botGap; });
+      y = y - G.botGap + G.groupGap;
+      if (left) ya = y; else yb = y;
     });
-    const botsBottom = y;
+    const botsBottom = Math.max(ya, yb);
 
-    let cy = pad;
+    let cy = G.top;
     model.hubs.forEach(h => {
+      const mine = model.chans.filter(c => c.hub === h.id);
       const start = cy;
-      model.chans.filter(c => c.hub === h.id).forEach(c => {
-        push('chan', c.id, chX, cy, chW, CH_H);
-        cy += CH_H + CH_GAP;
-      });
-      const end = cy - CH_GAP;
-      push('hub', h.id, hubX, Math.round((start + end) / 2 - HUB_H / 2), hubW, HUB_H);
-      cy += mobile ? 10 : 16;
+      mine.forEach(c => { push('chan', c.id, xCh, cy, G.chanW, G.chanH); cy += G.chanH + G.chanGap; });
+      const end = cy - G.chanGap;
+      push('hub', h.id, xHub, Math.round((start + end) / 2 - G.hubH / 2), G.hubW, G.hubH);
+      cy = end + G.hubSep;
     });
-    const chansBottom = cy - (mobile ? 10 : 16);
-    return { w: W, h: Math.max(220, Math.round(Math.max(botsBottom, chansBottom) + pad)), nodes, groupHeads, mobile };
+    const chansBottom = cy - G.hubSep;
+
+    return {
+      w: xCh + G.chanW + G.padX,
+      h: Math.round(Math.max(botsBottom, chansBottom) + G.padY),
+      nodes, groups,
+      cols: [
+        { x: xA, label: 'AI 봇', sub: '누가' },
+        { x: xHub, label: '게시 흐름', sub: '어디로' },
+        { x: xCh, label: '채널', sub: '어디에' }
+      ]
+    };
   }
 
   // 같은 노드에서 나가거나 들어오는 선은 포트 높이를 조금씩 나눠 겹침을 줄인다.
   function wfPortOffset(i, n, h) {
     if (!n || n < 2) return 0;
-    const span = Math.min(28, h * 0.62);
+    const span = Math.min(34, h * 0.6);
     return -span / 2 + (span / (n - 1)) * i;
   }
 
@@ -2254,29 +2328,164 @@
     if (!a || !b) return '';
     const x1 = a.x + a.w, y1 = a.y + a.h / 2 + (sy || 0);
     const x2 = b.x, y2 = b.y + b.h / 2 + (ty || 0);
-    const dx = Math.max(18, (x2 - x1) * 0.55);
+    const dx = Math.max(26, (x2 - x1) * 0.5);
     const r = n => Math.round(n * 10) / 10;
     return 'M' + r(x1) + ' ' + r(y1) + ' C' + r(x1 + dx) + ' ' + r(y1) + ', ' + r(x2 - dx) + ' ' + r(y2) + ', ' + r(x2) + ' ' + r(y2);
   }
 
-  // 좁은 화면에서는 상세 카드가 캔버스 아래에 있으므로, 고르면 그 카드로 이동시킨다.
-  function wfRevealDetail() {
-    const wrap = document.querySelector('#office .wf-wrap');
-    if (!wrap || !wrap.wfState || !wrap.wfState.L.mobile) return;
-    const det = wrap.wfParts && wrap.wfParts.detail;
-    if (!det || typeof det.scrollIntoView !== 'function') return;
-    det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  /* ── 팬 · 줌 ── */
+  function wfViewState() {
+    if (!state.wf.view) state.wf.view = { x: 0, y: 0, s: 1 };
+    return state.wf.view;
   }
 
-  function wfSelect(kind, id) {
-    state.wf.sel = kind + ':' + id;
-    wfPaint();
-    wfRevealDetail();
+  function wfWrapEl() {
+    return document.querySelector('#workflow .wf-wrap');
   }
 
+  function wfApplyView() {
+    const wrap = wfWrapEl();
+    if (!wrap || !wrap.wfParts) return;
+    const v = wfViewState();
+    const c = wrap.wfParts.canvas;
+    c.style.transform = 'translate(' + Math.round(v.x) + 'px, ' + Math.round(v.y) + 'px) scale(' + v.s + ')';
+    if (wrap.wfParts.pct) wrap.wfParts.pct.textContent = Math.round(v.s * 100) + '%';
+  }
+
+  // 세계 전체가 화면에 들어오게 맞춘다(↺ 버튼과 첫 진입).
+  // 좁은 화면에서는 첫 진입만 읽을 수 있는 배율로 두고(옆으로 밀어서 봄),
+  // ↺ 를 누르면 정말 전체가 보이게 줄인다.
+  function wfFitView(all) {
+    const wrap = wfWrapEl();
+    if (!wrap || !wrap.wfParts || !wrap.wfState) return;
+    const v = wfViewState();
+    const L = wrap.wfState.L;
+    const W = wrap.wfParts.vp.clientWidth || 0;
+    const H = wrap.wfParts.vp.clientHeight || 0;
+    if (!W || !H) { v.x = 0; v.y = 0; v.s = 1; wfApplyView(); return; }
+    const narrow = W < 660;
+    const room = narrow ? (all ? 8 : 0.62) : 0;
+    const s = Math.max(WF_ZOOM_MIN, room, Math.min(1, Math.min((W - 28) / L.w, (H - 28) / L.h)));
+    v.s = Math.round(s * 100) / 100;
+    if (v.s * L.w > W - 10) { v.x = 12; v.y = 12; }
+    else {
+      v.x = Math.round((W - L.w * v.s) / 2);
+      v.y = Math.round((H - L.h * v.s) / 2);
+    }
+    wfApplyView();
+  }
+
+  // 화면의 한 점을 기준으로 확대·축소한다.
+  function wfZoomAt(factor, cx, cy) {
+    const wrap = wfWrapEl();
+    if (!wrap || !wrap.wfParts) return;
+    const v = wfViewState();
+    const W = wrap.wfParts.vp.clientWidth || 0;
+    const H = wrap.wfParts.vp.clientHeight || 0;
+    const px = (cx == null ? W / 2 : cx);
+    const py = (cy == null ? H / 2 : cy);
+    const s2 = Math.max(WF_ZOOM_MIN, Math.min(WF_ZOOM_MAX, v.s * factor));
+    if (s2 === v.s) return;
+    v.x = px - (px - v.x) * (s2 / v.s);
+    v.y = py - (py - v.y) * (s2 / v.s);
+    v.s = s2;
+    wfApplyView();
+  }
+
+  function wfBindViewport(vp) {
+    const pts = new Map();
+    let drag = null;
+    let pinch = null;
+
+    const local = e => {
+      const r = vp.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+
+    vp.addEventListener('pointerdown', e => {
+      if (e.target && e.target.closest && e.target.closest('.wf-zoom, .wf-node, .wf-props')) return;
+      if (e.button != null && e.button !== 0) return;
+      const p = local(e);
+      pts.set(e.pointerId || 1, p);
+      if (pts.size === 1) {
+        const v = wfViewState();
+        drag = { x: p.x, y: p.y, vx: v.x, vy: v.y };
+        vp.classList.add('grabbing');
+        if (vp.setPointerCapture && e.pointerId != null) { try { vp.setPointerCapture(e.pointerId); } catch (err) {} }
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const v = wfViewState();
+        pinch = {
+          d: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+          cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+          s: v.s, x: v.x, y: v.y
+        };
+        drag = null;
+      }
+    });
+
+    vp.addEventListener('pointermove', e => {
+      if (!dragging()) return;
+      const p = local(e);
+      if (pts.has(e.pointerId || 1)) pts.set(e.pointerId || 1, p);
+      if (pinch && pts.size >= 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        const cx = (a.x + b.x) / 2;
+        const cy = (a.y + b.y) / 2;
+        const v = wfViewState();
+        const s2 = Math.max(WF_ZOOM_MIN, Math.min(WF_ZOOM_MAX, pinch.s * (d / pinch.d)));
+        v.x = cx - (pinch.cx - pinch.x) * (s2 / pinch.s);
+        v.y = cy - (pinch.cy - pinch.y) * (s2 / pinch.s);
+        v.s = s2;
+        wfApplyView();
+        return;
+      }
+      if (!drag) return;
+      const v = wfViewState();
+      v.x = drag.vx + (p.x - drag.x);
+      v.y = drag.vy + (p.y - drag.y);
+      wfApplyView();
+    });
+
+    function dragging() { return !!drag || (!!pinch && pts.size >= 2); }
+
+    const end = e => {
+      if (e && e.pointerId != null) pts.delete(e.pointerId);
+      else pts.clear();
+      if (pts.size < 2) pinch = null;
+      if (!pts.size) { drag = null; vp.classList.remove('grabbing'); }
+    };
+    vp.addEventListener('pointerup', end);
+    vp.addEventListener('pointercancel', end);
+    vp.addEventListener('pointerleave', e => { if (drag && !pts.size) end(e); });
+
+    vp.addEventListener('wheel', e => {
+      if (!e.deltaY) return;
+      if (e.preventDefault) e.preventDefault();
+      const p = local(e);
+      wfZoomAt(e.deltaY < 0 ? 1.12 : 0.89, p.x, p.y);
+    }, { passive: false });
+
+    // 두 손가락 핀치(터치 이벤트를 함께 받는 브라우저용)
+    let tdist = 0;
+    vp.addEventListener('touchstart', e => {
+      if (e.touches && e.touches.length === 2) {
+        tdist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY) || 1;
+      }
+    }, { passive: true });
+    vp.addEventListener('touchmove', e => {
+      if (!e.touches || e.touches.length !== 2) return;
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY) || 1;
+      if (tdist) { wfZoomAt(d / tdist); tdist = d; }
+      if (e.preventDefault) e.preventDefault();
+    }, { passive: false });
+  }
+
+  /* ── 노드 · 선 ── */
   function wfNodeEl(kind, item, box) {
-    const b = el('button', 'wf-node wf-' + kind + (item.count ? '' : ' wf-zero') +
-      (state.wf.sel === kind + ':' + item.id ? ' sel' : ''));
+    const sel = state.wf.sel === kind + ':' + item.id;
+    const b = el('button', 'wf-node wf-n-' + kind + (item.count ? '' : ' wf-zero') + (sel ? ' sel' : ''));
     b.type = 'button';
     b.dataset.kind = kind;
     b.dataset.id = item.id;
@@ -2284,25 +2493,45 @@
     b.style.top = box.y + 'px';
     b.style.width = box.w + 'px';
     b.style.height = box.h + 'px';
-    b.style.setProperty('--wf-accent', item.color || '#94A3B8');
+    const accent = item.color || '#94A3B8';
+    // 색은 CSS 변수로 넘긴다(테마별로 진하기만 바꾸면 되도록).
+    b.style.setProperty('--wf-accent', accent);
+    b.style.setProperty('--wf-accent-soft', mixHex(accent, '#FFFFFF', 0.86));
     b.title = item.name + ' · ' + item.count + '건';
-    if (kind !== 'bot') b.setAttribute('aria-pressed', state.wf.sel === kind + ':' + item.id ? 'true' : 'false');
+    b.setAttribute('aria-pressed', sel ? 'true' : 'false');
+    b.setAttribute('aria-label', WF_KIND_LABEL[kind] + ' ' + item.name + ' ' + item.count + '건');
+
     b.appendChild(el('i', 'wf-bar'));
+    b.appendChild(el('span', 'wf-port wf-port-in'));
+    b.appendChild(el('span', 'wf-port wf-port-out'));
     b.appendChild(el('span', 'wf-emoji', item.emoji || '🤖'));
+
     const meta = el('span', 'wf-meta');
-    meta.appendChild(el('b', 'wf-name', kind === 'hub' ? (item.short || item.name) : item.name));
+    if (kind === 'hub') {
+      // 흐름 카드는 이름이 길어서 타입 배지를 윗줄에 따로 둔다.
+      meta.appendChild(el('em', 'wf-kind', WF_KIND_LABEL[kind]));
+      meta.appendChild(el('b', 'wf-name', item.name));
+    } else {
+      const nameRow = el('span', 'wf-name-row');
+      nameRow.appendChild(el('em', 'wf-kind', WF_KIND_LABEL[kind]));
+      nameRow.appendChild(el('b', 'wf-name', item.name));
+      meta.appendChild(nameRow);
+    }
+
     let sub = '';
-    if (kind === 'bot') sub = item.lead ? '사단장' : (item.zone === 'a' ? 'A사단' : item.zone === 'b' ? 'B사단' : '새로 합류');
+    if (kind === 'bot') sub = (item.lead ? '사단장' : (item.zone === 'a' ? 'A사단' : item.zone === 'b' ? 'B사단' : '새로 합류'));
     else if (kind === 'chan') sub = item.last ? officeAgo(item.last) : '기록 없음';
     else sub = '봇 ' + item.bots.size + ' · 채널 ' + item.chans.size;
-    meta.appendChild(el('i', 'wf-nsub', sub));
+    meta.appendChild(el('i', 'wf-sub', sub));
     b.appendChild(meta);
-    b.appendChild(el('span', 'wf-badge', String(item.count)));
+
+    const badge = el('span', 'wf-badge', item.count ? String(item.count) : '0');
+    b.appendChild(badge);
     return b;
   }
 
   function wfStat(label, n, cls) {
-    const s = el('div', 'wf-d-stat' + (cls ? ' ' + cls : ''));
+    const s = el('div', 'wf-stat' + (cls ? ' ' + cls : ''));
     s.appendChild(el('b', '', String(n)));
     s.appendChild(el('i', '', label));
     return s;
@@ -2334,113 +2563,82 @@
     top.appendChild(el('i', '', officeAgo(p.ts)));
     a.appendChild(top);
     const meta = el('div', 'wf-post-meta');
-    meta.appendChild(el('span', 'wf-tag', (p.botEmoji || '') + ' ' + p.botName));
     const ch = WF_CHAN_BY_ID[p.channelId];
-    meta.appendChild(el('span', 'wf-tag', (ch ? ch.emoji : '') + ' ' + p.channelName));
+    if (ch && ch.color) a.style.setProperty('--wf-accent', ch.color);
+    meta.appendChild(el('span', 'wf-tag', (ch ? ch.emoji + ' ' + p.channelName : p.channelName)));
+    meta.appendChild(el('span', 'wf-tag', (p.botEmoji || '🤖') + ' ' + p.botName));
     if (p.row) meta.appendChild(el('span', 'wf-tag wf-plain', SHEETS[p.sheet].short + '·' + p.tab + ' ' + p.row + '행'));
     a.appendChild(meta);
     return a;
   }
 
-  function wfDetail(box, model, posts) {
-    box.innerHTML = '';
-    const ref = wfSelRef(state.wf.sel);
-    const head = el('div', 'wf-d-head');
-    const addClear = () => {
-      const c = el('button', 'wf-d-clear', '✕');
-      c.type = 'button';
-      c.title = '선택 해제';
-      c.addEventListener('click', () => { state.wf.sel = null; wfPaint(); });
-      head.appendChild(c);
-    };
-
-    if (!ref) {
-      head.appendChild(el('span', 'wf-d-ico', '🧭'));
-      const t = el('div', 'wf-d-t');
-      t.appendChild(el('b', '', '전체 흐름'));
-      t.appendChild(el('i', '', '노드를 누르면 어디에 무엇을 올렸는지 보여요'));
-      head.appendChild(t);
-      box.appendChild(head);
-
-      const stats = el('div', 'wf-d-stats');
-      stats.appendChild(wfStat('게시·출고', posts.length, 'total'));
-      stats.appendChild(wfStat('봇', model.bots.filter(b => b.count > 0).length, 'bot'));
-      stats.appendChild(wfStat('채널', model.chans.filter(c => c.count > 0).length, 'chan'));
-      box.appendChild(stats);
-
-      const topChans = model.chans.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
-      if (topChans.length) {
-        box.appendChild(el('h4', 'wf-d-h', '많이 올린 채널'));
-        const max = topChans[0].count || 1;
-        topChans.forEach(c => box.appendChild(wfBarRow(c.emoji + ' ' + c.name, c.count, c.count / max, () => wfSelect('chan', c.id))));
-      }
-      box.appendChild(el('h4', 'wf-d-h', '최근 게시·출고'));
-      if (!posts.length) box.appendChild(el('p', 'wf-d-empty', '조건에 맞는 기록이 없습니다.'));
-      posts.slice(0, 6).forEach(p => box.appendChild(wfPostEl(p)));
-      if (posts.length > 6) box.appendChild(el('p', 'wf-d-more', '외 ' + (posts.length - 6) + '건 더 있어요'));
-      return;
-    }
-
+  // 연결 요약 — 이 노드가 어디로 이어져 있는지 한 줄 + 칩
+  function wfConnRow(box, model, ref) {
+    const wrap = el('div', 'wf-p-conn');
+    wrap.appendChild(el('i', '', '연결 요약'));
+    const chips = el('div', 'wf-p-chips');
+    let text = '';
     if (ref.kind === 'bot') {
-      const b = wfBotMeta(model, ref.id);
-      const own = posts.filter(p => p.botId === ref.id);
-      head.appendChild(el('span', 'wf-d-ico', b ? b.emoji : '🤖'));
-      const t = el('div', 'wf-d-t');
-      t.appendChild(el('b', '', b ? b.name : ref.id));
-      t.appendChild(el('i', '', (b ? (b.lead ? '사단장' : (b.zone === 'a' ? 'A사단' : b.zone === 'b' ? 'B사단' : '새로 합류')) : '') + ' · 게시 ' + own.length + '건'));
-      head.appendChild(t);
-      addClear();
-      box.appendChild(head);
-      if (!own.length) {
-        box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 봇의 게시 기록이 없습니다.'));
-        return;
-      }
-      addBreakdown(box, model, own, 'chan', '어디에 올렸나');
-      addPosts(box, posts, p => p.botId === ref.id);
-      return;
-    }
-
-    if (ref.kind === 'chan') {
+      const b = model.botById.get(ref.id);
+      const hubs = new Set();
+      if (b) b.chans.forEach((n, cid) => { const c = model.chanById.get(cid); if (c) hubs.add(c.hub); });
+      text = hubs.size + '개 흐름 · ' + (b ? b.chans.size : 0) + '개 채널로 이어짐';
+      hubs.forEach(hid => {
+        const h = model.hubById.get(hid);
+        if (!h) return;
+        const chip = el('button', 'wf-p-chip');
+        chip.type = 'button';
+        chip.textContent = h.emoji + ' ' + h.short;
+        chip.style.setProperty('--wf-accent', h.color);
+        chip.addEventListener('click', () => wfSelect('hub', hid));
+        chips.appendChild(chip);
+      });
+    } else if (ref.kind === 'chan') {
       const c = model.chanById.get(ref.id);
-      const own = posts.filter(p => p.channelId === ref.id);
-      head.appendChild(el('span', 'wf-d-ico', c ? c.emoji : '🏁'));
-      const t = el('div', 'wf-d-t');
-      t.appendChild(el('b', '', c ? c.name : ref.id));
-      t.appendChild(el('i', '', (c ? (WF_HUB_BY_ID[c.hub] || {}).name : '') + ' · 게시 ' + own.length + '건'));
-      head.appendChild(t);
-      addClear();
-      box.appendChild(head);
-      if (!own.length) {
-        box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 채널의 게시 기록이 없습니다.'));
-        return;
+      const h = c ? model.hubById.get(c.hub) : null;
+      text = (h ? h.name : '') + ' · ' + (c ? c.bots.size : 0) + '명이 올림';
+      if (h) {
+        const chip = el('button', 'wf-p-chip');
+        chip.type = 'button';
+        chip.textContent = h.emoji + ' ' + h.short;
+        chip.style.setProperty('--wf-accent', h.color);
+        chip.addEventListener('click', () => wfSelect('hub', h.id));
+        chips.appendChild(chip);
       }
-      addBreakdown(box, model, own, 'bot', '누가 올렸나');
-      addPosts(box, posts, p => p.channelId === ref.id);
-      return;
+      if (c) c.bots.forEach((n, bid) => {
+        const b = model.botById.get(bid);
+        if (!b) return;
+        const chip = el('button', 'wf-p-chip');
+        chip.type = 'button';
+        chip.textContent = b.emoji + ' ' + b.name;
+        chip.style.setProperty('--wf-accent', b.color);
+        chip.addEventListener('click', () => wfSelect('bot', bid));
+        chips.appendChild(chip);
+      });
+    } else {
+      const h = model.hubById.get(ref.id);
+      text = (h ? h.chans.size : 0) + '개 채널 · ' + (h ? h.bots.size : 0) + '명이 올림';
+      if (h) h.chans.forEach(cid => {
+        const c = model.chanById.get(cid);
+        if (!c) return;
+        const chip = el('button', 'wf-p-chip');
+        chip.type = 'button';
+        chip.textContent = c.emoji + ' ' + c.name;
+        chip.style.setProperty('--wf-accent', c.color);
+        chip.addEventListener('click', () => wfSelect('chan', cid));
+        chips.appendChild(chip);
+      });
     }
-
-    const h = model.hubById.get(ref.id);
-    const own = posts.filter(p => p.hubId === ref.id);
-    head.appendChild(el('span', 'wf-d-ico', h ? h.emoji : '🗂'));
-    const t = el('div', 'wf-d-t');
-    t.appendChild(el('b', '', h ? h.name : ref.id));
-    t.appendChild(el('i', '', '게시 ' + own.length + '건'));
-    head.appendChild(t);
-    addClear();
-    box.appendChild(head);
-    if (!own.length) {
-      box.appendChild(el('p', 'wf-d-empty', '이 기간·검색에는 이 축의 기록이 없습니다.'));
-      return;
-    }
-    addBreakdown(box, model, own, 'chan', '어느 채널로 나갔나');
-    addPosts(box, posts, p => p.hubId === ref.id);
+    wrap.appendChild(el('b', '', text));
+    if (chips.children.length) wrap.appendChild(chips);
+    box.appendChild(wrap);
   }
 
   function wfBotMeta(model, id) {
     return model.bots.find(b => b.id === id) || OFFICE_FIXED.find(b => b.id === id) || null;
   }
 
-  // 상세 패널의 채널/봇별 건수 묶음 (누르면 그 노드로 이동)
+  // 채널/봇별 건수 막대 (누르면 그 노드로 이동)
   function addBreakdown(box, model, own, by, label) {
     const map = new Map();
     own.forEach(p => {
@@ -2448,22 +2646,117 @@
       map.set(k, (map.get(k) || 0) + 1);
     });
     const rows = [...map.entries()].sort((a, b) => b[1] - a[1]);
-    box.appendChild(el('h4', 'wf-d-h', label + ' · ' + rows.length + '곳'));
+    box.appendChild(el('h4', 'wf-p-h', label + ' · ' + rows.length + '곳'));
     const max = rows[0] ? rows[0][1] : 1;
     rows.forEach(r => {
-      const meta = by === 'chan' ? WF_CHAN_BY_ID[r[0]] : (model.botById.get(r[0]) || {});
-      const name = by === 'chan' ? (meta.name || r[0]) : (meta.name || r[0]);
-      const emoji = meta.emoji || '•';
-      box.appendChild(wfBarRow(emoji + ' ' + name, r[1], r[1] / max, () => wfSelect(by, r[0])));
+      const meta = by === 'chan' ? (WF_CHAN_BY_ID[r[0]] || {}) : (model.botById.get(r[0]) || {});
+      box.appendChild(wfBarRow((meta.emoji || '•') + ' ' + (meta.name || r[0]), r[1], r[1] / max, () => wfSelect(by, r[0])));
     });
   }
 
   function addPosts(box, posts, pred) {
     const own = posts.filter(pred);
-    box.appendChild(el('h4', 'wf-d-h', '게시·출고 내역'));
-    own.slice(0, 12).forEach(p => box.appendChild(wfPostEl(p)));
-    if (own.length > 12) box.appendChild(el('p', 'wf-d-more', '외 ' + (own.length - 12) + '건 더 있어요'));
-    if (!own.length) box.appendChild(el('p', 'wf-d-empty', '기록이 없습니다.'));
+    box.appendChild(el('h4', 'wf-p-h', '게시 내역 · ' + own.length + '건'));
+    own.slice(0, 14).forEach(p => box.appendChild(wfPostEl(p)));
+    if (own.length > 14) box.appendChild(el('p', 'wf-p-more', '외 ' + (own.length - 14) + '건 더 있어요'));
+    if (!own.length) box.appendChild(el('p', 'wf-p-empty', '기록이 없습니다.'));
+  }
+
+  // 오른쪽 '속성 · 게시 내역'
+  function wfDetail(box, model, posts) {
+    box.innerHTML = '';
+    const ref = wfSelRef(state.wf.sel);
+
+    const head = el('div', 'wf-p-head');
+    head.appendChild(el('span', 'wf-p-kicker', '속성 · 게시 내역'));
+    const x = el('button', 'wf-p-close', '×');
+    x.type = 'button';
+    x.title = '닫기';
+    x.setAttribute('aria-label', '속성 패널 닫기');
+    x.addEventListener('click', ev => {
+      if (ev.stopPropagation) ev.stopPropagation();
+      state.wf.sel = null;
+      state.wf.open = false;
+      wfPaint();
+    });
+    head.appendChild(x);
+    head.addEventListener('click', () => {
+      if (!ref) { state.wf.open = !state.wf.open; box.classList.toggle('open', !!state.wf.open); }
+    });
+    box.appendChild(head);
+    box.classList.toggle('open', !!ref || !!state.wf.open);
+
+    const body = el('div', 'wf-p-body');
+    box.appendChild(body);
+
+    if (!ref) {
+      const id = el('div', 'wf-p-id');
+      id.appendChild(el('span', 'wf-p-emoji', '🧭'));
+      const t = el('div', 'wf-p-tit');
+      t.appendChild(el('em', 'wf-kind wf-kind-all', 'ALL'));
+      t.appendChild(el('b', '', '전체 흐름'));
+      t.appendChild(el('i', '', '노드를 고르면 그 흐름만 펼쳐 보여요'));
+      id.appendChild(t);
+      body.appendChild(id);
+
+      const stats = el('div', 'wf-p-stats');
+      stats.appendChild(wfStat('게시·출고', posts.length, 'total'));
+      stats.appendChild(wfStat('봇', model.bots.filter(b => b.count > 0).length, 'bot'));
+      stats.appendChild(wfStat('채널', model.chans.filter(c => c.count > 0).length, 'chan'));
+      body.appendChild(stats);
+
+      const topChans = model.chans.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
+      if (topChans.length) {
+        body.appendChild(el('h4', 'wf-p-h', '많이 올린 채널'));
+        const max = topChans[0].count || 1;
+        topChans.forEach(c => body.appendChild(wfBarRow(c.emoji + ' ' + c.name, c.count, c.count / max, () => wfSelect('chan', c.id))));
+      }
+      body.appendChild(el('h4', 'wf-p-h', '최근 게시·출고'));
+      if (!posts.length) body.appendChild(el('p', 'wf-p-empty', '조건에 맞는 기록이 없습니다.'));
+      posts.slice(0, 8).forEach(p => body.appendChild(wfPostEl(p)));
+      if (posts.length > 8) body.appendChild(el('p', 'wf-p-more', '외 ' + (posts.length - 8) + '건 더 있어요'));
+      return;
+    }
+
+    let item = null;
+    let kindLabel = WF_KIND_LABEL[ref.kind];
+    if (ref.kind === 'bot') item = wfBotMeta(model, ref.id);
+    else if (ref.kind === 'chan') item = model.chanById.get(ref.id) || WF_CHAN_BY_ID[ref.id];
+    else item = model.hubById.get(ref.id) || WF_HUB_BY_ID[ref.id];
+
+    const id = el('div', 'wf-p-id');
+    id.appendChild(el('span', 'wf-p-emoji', (item && item.emoji) || '•'));
+    const t = el('div', 'wf-p-tit');
+    t.appendChild(el('em', 'wf-kind', kindLabel));
+    t.appendChild(el('b', '', (item && item.name) || ref.id));
+    let line = '';
+    if (ref.kind === 'bot') line = ((item && item.lead) ? '사단장' : (item && item.zone === 'a' ? 'A사단' : item && item.zone === 'b' ? 'B사단' : '새로 합류')) + ' · 게시 ' + posts.filter(p => p.botId === ref.id).length + '건';
+    else if (ref.kind === 'chan') line = ((WF_HUB_BY_ID[(item && item.hub) || ''] || {}).name || '') + ' · 게시 ' + posts.filter(p => p.channelId === ref.id).length + '건';
+    else line = '게시 ' + posts.filter(p => p.hubId === ref.id).length + '건';
+    t.appendChild(el('i', '', line));
+    id.appendChild(t);
+    body.appendChild(id);
+
+    wfConnRow(body, model, ref);
+
+    if (ref.kind === 'bot') {
+      const own = posts.filter(p => p.botId === ref.id);
+      if (!own.length) { body.appendChild(el('p', 'wf-p-empty', '이 기간·검색에는 이 봇의 게시 기록이 없습니다.')); return; }
+      addBreakdown(body, model, own, 'chan', '어디에 올렸나');
+      addPosts(body, posts, p => p.botId === ref.id);
+      return;
+    }
+    if (ref.kind === 'chan') {
+      const own = posts.filter(p => p.channelId === ref.id);
+      if (!own.length) { body.appendChild(el('p', 'wf-p-empty', '이 기간·검색에는 이 채널의 게시 기록이 없습니다.')); return; }
+      addBreakdown(body, model, own, 'bot', '누가 올렸나');
+      addPosts(body, posts, p => p.channelId === ref.id);
+      return;
+    }
+    const own = posts.filter(p => p.hubId === ref.id);
+    if (!own.length) { body.appendChild(el('p', 'wf-p-empty', '이 기간·검색에는 이 흐름의 기록이 없습니다.')); return; }
+    addBreakdown(body, model, own, 'chan', '어느 채널로 나갔나');
+    addPosts(body, posts, p => p.hubId === ref.id);
   }
 
   function wfActiveSet(model, sel) {
@@ -2471,7 +2764,6 @@
     if (!ref) return null;
     const nodes = new Set([ref.kind + ':' + ref.id]);
     const edges = new Set();
-    // 엣지 id는 모델의 원래 id 규칙('e:보낸이>받는이')을 그대로 쓴다.
     const edge = (from, to) => { const id = 'e:' + from + '>' + to; if (model.edgeIds.has(id)) edges.add(id); };
 
     if (ref.kind === 'bot') {
@@ -2506,7 +2798,7 @@
   }
 
   function wfApplyFocus() {
-    const wrap = document.querySelector('#office .wf-wrap');
+    const wrap = wfWrapEl();
     if (!wrap || !wrap.wfParts || !wrap.wfState) return;
     const canvas = wrap.wfParts.canvas;
     const set = wfActiveSet(wrap.wfState.model, wfHoverSel || state.wf.sel);
@@ -2522,17 +2814,39 @@
     });
   }
 
+  function wfSelect(kind, id) {
+    state.wf.sel = kind + ':' + id;
+    state.wf.open = true;
+    wfPaint();
+    wfRevealDetail();
+  }
+
+  // 좁은 화면에서는 상세 패널이 아래 시트라, 고르면 그 시트를 위로 올리고
+  // 고른 노드가 시트에 가리지 않게 캔버스를 그쪽으로 옮긴다.
+  function wfRevealDetail() {
+    const wrap = wfWrapEl();
+    if (!wrap || !wrap.wfParts) return;
+    const box = wrap.wfParts.props;
+    if (!box || !box.classList) return;
+    box.classList.toggle('open', !!state.wf.sel || !!state.wf.open);
+    const vp = wrap.wfParts.vp;
+    const W = vp.clientWidth || 0;
+    if (W >= 660 || !state.wf.sel || !wrap.wfState) return;
+    const b = wrap.wfState.L.nodes.get(state.wf.sel);
+    if (!b) return;
+    const v = wfViewState();
+    const H = vp.clientHeight || 0;
+    v.x = Math.round(W / 2 - (b.x + b.w / 2) * v.s);
+    v.y = Math.round(H * 0.24 - (b.y + b.h / 2) * v.s);
+    wfApplyView();
+  }
+
   function wfWrap() {
-    const wrap = el('section', 'wf-wrap');
-    wrap.setAttribute('aria-label', '사단 게시·출고 워크플로우');
+    const view = el('section', 'wf-wrap');
+    view.setAttribute('aria-label', '사단 워크플로우 캔버스');
 
-    const head = el('div', 'wf-head');
-    const title = el('div', 'wf-title');
-    title.appendChild(el('b', '', '🔀 사단 게시·출고 워크플로우'));
-    title.appendChild(el('span', '', '“누가 · 어디에 · 무엇을” 올렸는지 시트 기록에서 자동으로 이어 그립니다'));
-    head.appendChild(title);
-
-    const tools = el('div', 'wf-tools');
+    /* 상단 슬림 툴바 */
+    const bar = el('div', 'wf-topbar');
     const seg = el('div', 'wf-seg');
     [['all', '전체'], ['today', '오늘'], ['24h', '최근 24시간']].forEach(o => {
       const b = el('button', 'wf-chip' + (state.wf.period === o[0] ? ' on' : ''), o[1]);
@@ -2545,62 +2859,87 @@
       });
       seg.appendChild(b);
     });
-    tools.appendChild(seg);
+    bar.appendChild(seg);
 
     const search = el('label', 'wf-search');
     search.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="6.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     const inp = el('input');
     inp.type = 'search';
     inp.className = 'wf-q';
-    inp.placeholder = '봇·채널·제목 검색';
+    inp.placeholder = '봇 · 채널 · 제목 검색';
     inp.value = state.wf.q || '';
     inp.autocomplete = 'off';
     inp.addEventListener('input', () => { state.wf.q = inp.value; wfPaint(); });
     search.appendChild(inp);
-    tools.appendChild(search);
+    bar.appendChild(search);
 
-    const reset = el('button', 'wf-reset', '↺ 전체 보기');
+    const sub = el('span', 'wf-sum', '');
+    bar.appendChild(sub);
+
+    const reset = el('button', 'wf-reset', '↺ 초기화');
     reset.type = 'button';
     reset.addEventListener('click', () => {
       state.wf.period = 'all';
       state.wf.q = '';
       state.wf.sel = null;
+      state.wf.open = false;
       seg.querySelectorAll('.wf-chip').forEach(x => x.classList.toggle('on', x.dataset.period === 'all'));
       inp.value = '';
       wfPaint();
+      wfFitView(true);
     });
-    tools.appendChild(reset);
-    head.appendChild(tools);
-    wrap.appendChild(head);
+    bar.appendChild(reset);
+    view.appendChild(bar);
 
-    const sub = el('div', 'wf-sub');
-    wrap.appendChild(sub);
-
-    const body = el('div', 'wf-body');
+    /* 캔버스 + 속성 패널 */
+    const main = el('div', 'wf-main');
+    const vp = el('div', 'wf-canvas-vp');
     const canvas = el('div', 'wf-canvas');
     canvas.setAttribute('role', 'group');
-    canvas.setAttribute('aria-label', '노드 워크플로우 캔버스');
-    const detail = el('aside', 'wf-detail');
-    detail.setAttribute('aria-live', 'polite');
-    body.appendChild(canvas);
-    body.appendChild(detail);
-    wrap.appendChild(body);
+    canvas.setAttribute('aria-label', '워크플로우 노드 캔버스');
+    vp.appendChild(canvas);
+
+    const zoom = el('div', 'wf-zoom');
+    const zOut = el('button', 'wf-zbtn', '−');
+    zOut.type = 'button';
+    zOut.title = '축소';
+    zOut.setAttribute('aria-label', '축소');
+    zOut.addEventListener('click', () => wfZoomAt(0.85));
+    const pct = el('span', 'wf-zpct', '100%');
+    const zIn = el('button', 'wf-zbtn', '+');
+    zIn.type = 'button';
+    zIn.title = '확대';
+    zIn.setAttribute('aria-label', '확대');
+    zIn.addEventListener('click', () => wfZoomAt(1.18));
+    const zFit = el('button', 'wf-zbtn wf-zfit', '↺');
+    zFit.type = 'button';
+    zFit.title = '전체 보기';
+    zFit.setAttribute('aria-label', '전체 보기');
+    zFit.addEventListener('click', () => wfFitView(true));
+    zoom.appendChild(zOut);
+    zoom.appendChild(pct);
+    zoom.appendChild(zIn);
+    zoom.appendChild(zFit);
+    vp.appendChild(zoom);
+    main.appendChild(vp);
+
+    const props = el('aside', 'wf-props');
+    props.setAttribute('aria-label', '속성 · 게시 내역');
+    main.appendChild(props);
+    view.appendChild(main);
 
     canvas.addEventListener('click', e => {
       const hitEdge = e.target && e.target.closest ? e.target.closest('.wf-edge-hit') : null;
       if (hitEdge) {
         const hub = hitEdge.getAttribute('data-hub');
-        if (hub) {
-          state.wf.sel = 'hub:' + hub;
-          wfPaint();
-          wfRevealDetail();
-        }
+        if (hub) { state.wf.sel = 'hub:' + hub; state.wf.open = true; wfPaint(); wfRevealDetail(); }
         return;
       }
       const n = e.target && e.target.closest ? e.target.closest('.wf-node') : null;
       if (!n) return;
       const key = n.dataset.kind + ':' + n.dataset.id;
       state.wf.sel = state.wf.sel === key ? null : key;
+      state.wf.open = true;
       wfPaint();
       wfRevealDetail();
     });
@@ -2615,31 +2954,33 @@
     canvas.addEventListener('mouseout', e => hover(e, false));
     canvas.addEventListener('focusin', e => hover(e, true));
     canvas.addEventListener('focusout', e => hover(e, false));
+    wfBindViewport(vp);
 
-    wrap.wfParts = { canvas, detail, sub };
-    return wrap;
+    view.wfParts = { canvas, vp, props, sub, pct };
+    return view;
   }
 
-  function wfPaint() {
-    const wrap = document.querySelector('#office .wf-wrap');
+  function wfPaint(fit) {
+    const wrap = wfWrapEl();
     if (!wrap || !wrap.wfParts) return;
     wfHoverSel = null;
-    const { canvas, detail, sub } = wrap.wfParts;
-    const all = wfParse(officeMsgs());
+    const { canvas, props, sub } = wrap.wfParts;
+    const all = wfParse(wfMsgs());
     const posts = wfFilter(all);
     const model = wfModel(posts);
-    const width = canvas.clientWidth || WF_DEFAULT_W;
-    const L = wfLayout(model, width);
+    const L = wfLayout(model);
 
     const nBot = model.bots.filter(b => b.count > 0).length;
     const nChan = model.chans.filter(c => c.count > 0).length;
-    sub.textContent = '게시·출고 ' + posts.length + '건 · 봇 ' + nBot + '곳 · 채널 ' + nChan + '곳' +
-      (state.wf.q ? ' · “' + state.wf.q + '” 검색' : '');
+    const summary = posts.length + '건 · 봇 ' + nBot + ' · 채널 ' + nChan;
+    if (sub) sub.textContent = summary + (state.wf.q ? ' · “' + state.wf.q + '”' : '');
+    const head = $('#chatSub');
+    if (head && state.view === 'workflow') head.textContent = '누가 · 어디에 · 무엇을 올렸는지 — 시트 기록에서 자동으로';
 
     canvas.innerHTML = '';
+    canvas.style.width = L.w + 'px';
     canvas.style.height = L.h + 'px';
     canvas.classList.toggle('wf-empty', posts.length === 0);
-    canvas.classList.toggle('wf-mobile', !!L.mobile);
 
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
@@ -2656,40 +2997,53 @@
       if (!inMap.has(e.to)) inMap.set(e.to, []);
       inMap.get(e.to).push(e);
     });
-    model.edges.forEach(e => {
+    const pathOf = (e, sy, ty) => {
       const a = L.nodes.get(e.from);
       const b = L.nodes.get(e.to);
-      if (!a || !b) return;
+      if (!a || !b) return null;
       const outs = outMap.get(e.from);
       const ins = inMap.get(e.to);
-      const sy = wfPortOffset(outs.indexOf(e), outs.length, a.h);
-      const ty = wfPortOffset(ins.indexOf(e), ins.length, b.h);
+      return wfEdgePath(a, b,
+        wfPortOffset(outs.indexOf(e), outs.length, a.h),
+        wfPortOffset(ins.indexOf(e), ins.length, b.h));
+    };
+    model.edges.forEach(e => {
+      const d = pathOf(e);
+      if (!d) return;
+      const color = (model.hubById.get(e.hub) || {}).color || '#94A3B8';
       const p = document.createElementNS(NS, 'path');
       p.setAttribute('class', 'wf-edge');
       p.setAttribute('data-eid', e.id);
       p.setAttribute('data-hub', e.hub);
-      p.setAttribute('d', wfEdgePath(a, b, sy, ty));
-      p.setAttribute('stroke', (model.hubById.get(e.hub) || {}).color || '#C6CDD5');
-      p.setAttribute('stroke-width', String(Math.round((1 + Math.min(4, e.count) * 0.55) * 10) / 10));
+      p.setAttribute('d', d);
+      p.style.setProperty('--wf-edge-base', mixHex(color, '#E4E8EF', 0.55));
+      p.style.setProperty('--wf-edge-hot', color);
+      p.setAttribute('stroke-width', String(Math.round((1.3 + Math.min(3, e.count) * 0.42) * 10) / 10));
       svg.appendChild(p);
     });
     // 보이는 선은 가늘어서 누르기 어렵다 → 같은 자리에 투명한 넓은 선을 겹쳐 둔다.
     model.edges.forEach(e => {
-      const a = L.nodes.get(e.from);
-      const b = L.nodes.get(e.to);
-      if (!a || !b) return;
-      const outs = outMap.get(e.from);
-      const ins = inMap.get(e.to);
+      const d = pathOf(e);
+      if (!d) return;
       const hit = document.createElementNS(NS, 'path');
       hit.setAttribute('class', 'wf-edge-hit');
       hit.setAttribute('data-eid', e.id);
       hit.setAttribute('data-hub', e.hub);
-      hit.setAttribute('d', wfEdgePath(a, b, wfPortOffset(outs.indexOf(e), outs.length, a.h), wfPortOffset(ins.indexOf(e), ins.length, b.h)));
+      hit.setAttribute('d', d);
       svg.appendChild(hit);
     });
     canvas.appendChild(svg);
 
-    L.groupHeads.forEach(g => {
+    // 열 이름표
+    L.cols.forEach(c => {
+      const h = el('div', 'wf-col');
+      h.style.left = c.x + 'px';
+      h.appendChild(el('b', '', c.label));
+      h.appendChild(el('i', '', c.sub));
+      canvas.appendChild(h);
+    });
+
+    L.groups.forEach(g => {
       const d = el('div', 'wf-group');
       d.style.left = g.x + 'px';
       d.style.top = g.y + 'px';
@@ -2715,13 +3069,33 @@
     if (!posts.length) {
       const note = el('div', 'wf-empty-note');
       note.appendChild(el('b', '', '아직 이어 그릴 게시·출고 기록이 없습니다'));
-      note.appendChild(el('span', '', '시트에 [완료]·발행·업로드·등록 같은 보고가 쌓이면 선이 자동으로 이어져요.'));
+      note.appendChild(el('span', '', '시트에 [완료]·발행·업로드·등록 같은 보고가 쌓이면 선이 저절로 이어져요.'));
       canvas.appendChild(note);
     }
 
     wrap.wfState = { model, L };
-    wfDetail(detail, model, posts);
+    wfDetail(props, model, posts);
     wfApplyFocus();
+    if (fit) wfFitView();
+    else wfApplyView();
+    wfRevealDetail();
+  }
+
+  function wfMsgs() {
+    const data = state.rooms[state.roomId];
+    return data ? data.msgs : [];
+  }
+
+  function renderWorkflow() {
+    const box = $('#workflow');
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = '';
+    if (!state.wf.view) state.wf.view = { x: 0, y: 0, s: 1 };
+    box.appendChild(wfWrap());
+    wfPaint(true);
+    const lbl = $('#tabFilterLabel');
+    if (lbl) lbl.textContent = '게시 흐름';
   }
 
   function renderOffice() {
@@ -2733,12 +3107,8 @@
     box.dataset.skin = state.skin || 'day';
     const keepScroll = box.scrollTop;
     box.innerHTML = '';
-    // 지도(.ofc-wrap) 아래에 🔀 게시·출고 워크플로우를 이어 붙인다.
-    const stack = el('div', 'ofc-stack');
-    stack.appendChild(officeWrap(snap));
-    stack.appendChild(wfWrap());
-    box.appendChild(stack);
-    wfPaint();
+    // 사단 오피스는 등각 지도 한 장만 — 워크플로우는 별도 방(🔀)으로 나갔다.
+    box.appendChild(officeWrap(snap));
     if (keepScroll) box.scrollTop = keepScroll;
 
     const sub = $('#chatSub');
@@ -2841,10 +3211,12 @@
     if (bd) bd.hidden = true;
   }
 
-  // 오피스 패널은 [hidden] 으로도 감춰지므로 뷰에 맞춰 직접 켜고 끈다.
+  // 오피스·워크플로우 패널은 [hidden] 으로도 감춰지므로 뷰에 맞춰 직접 켜고 끈다.
   function syncOfficeVisible() {
     const box = $('#office');
     if (box) box.hidden = state.view !== 'office';
+    const wf = $('#workflow');
+    if (wf) wf.hidden = state.view !== 'workflow';
   }
 
   /* ───────── 새로고침/폴링 ───────── */
@@ -2862,16 +3234,18 @@
       const msgs = await loadRoom(room, { limit: 80 });
       const added = msgs.filter(m => !beforeKeys.has(m.key));
       const isOffice = room.kind === 'office';
+      const isWf = room.kind === 'workflow';
       const box = $('#messages');
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
       if (isOffice) renderOffice();
+      else if (isWf) renderWorkflow();
       else renderMessages();
       renderRooms();
       if (added.length && !opts.silent) {
         toast(`${added.length}건 새 기록을 불러왔습니다.`);
-        if (!isOffice) scrollToBottom(true);
+        if (!isOffice && !isWf) scrollToBottom(true);
       } else if (added.length && opts.silent) {
-        if (isOffice) { /* 오피스는 자동 갱신만 */ }
+        if (isOffice || isWf) { /* 오피스·워크플로우는 자동 갱신만 */ }
         else if (nearBottom) scrollToBottom(true);
         else { $('#jumpCount').textContent = added.length; $('#jumpNew').hidden = false; }
       } else if (opts.manual) {
@@ -2895,7 +3269,7 @@
     if (!sec || !api.isLive()) return;
     pollTimer = setInterval(() => {
       if (document.hidden) return;
-      if (state.view !== 'chat' && state.view !== 'office') return;
+      if (state.view !== 'chat' && state.view !== 'office' && state.view !== 'workflow') return;
       refresh({ silent: true });
     }, sec * 1000);
   }
@@ -3623,12 +3997,12 @@
     $('#jumpNew').addEventListener('click', () => { $('#jumpNew').hidden = true; scrollToBottom(true); });
 
     window.addEventListener('online', () => api.isLive() && refresh({ silent: true }));
-    // 화면 폭이 바뀌면 워크플로우 노드·선을 같은 좌표로 다시 그린다(세로/가로 회전 포함).
+    // 화면 폭이 바뀌면 워크플로우 캔버스를 다시 맞춘다(세로/가로 회전 포함).
     let wfResizeTimer = null;
     window.addEventListener('resize', () => {
-      if (state.view !== 'office') return;
+      if (state.view !== 'workflow') return;
       clearTimeout(wfResizeTimer);
-      wfResizeTimer = setTimeout(() => { wfPaint(); }, 160);
+      wfResizeTimer = setTimeout(() => { wfFitView(); }, 160);
     });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && state.view === 'chat' && api.isLive()) refresh({ silent: true });
@@ -3639,8 +4013,9 @@
   /* ───────── 시작 ───────── */
   async function bootstrapData() {
     const box = $('#messages');
-    const officeRoom = roomById(state.roomId).kind === 'office';
-    if (!state.rooms[state.roomId] && !officeRoom) {
+    const kind = roomById(state.roomId).kind;
+    const panelRoom = kind === 'office' || kind === 'workflow';
+    if (!state.rooms[state.roomId] && !panelRoom) {
       box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     }
     // 탭 메타(링크·선택기용)
@@ -3657,12 +4032,13 @@
       console.error(e);
       toast(e.message || '불러오지 못했습니다.', true);
     }
-    if (officeRoom) renderOffice();
+    if (kind === 'office') renderOffice();
+    else if (kind === 'workflow') renderWorkflow();
     else renderMessages();
     renderRooms();
     renderChatHead();
     markSeen(state.roomId);
-    if (!officeRoom) scrollToBottom(true);
+    if (!panelRoom) scrollToBottom(true);
     applyMode();
     schedulePoll();
   }
@@ -3697,8 +4073,10 @@
       if (rid && ROOMS.some(r => r.id === rid)) state.roomId = rid;
       if (qs.get('view') === 'chat') { state.view = 'chat'; }
     } catch (e) { /* ignore */ }
-    // ?room=office 로 바로 열면 채팅 대신 오피스 화면이 펼쳐진다.
-    if (roomById(state.roomId).kind === 'office') state.view = 'office';
+    // ?room=office·?room=workflow 로 바로 열면 채팅 대신 그 방 화면이 펼쳐진다.
+    const startKind = roomById(state.roomId).kind;
+    if (startKind === 'office') state.view = 'office';
+    else if (startKind === 'workflow') state.view = 'workflow';
     // ?room=aichat 처럼 기본 전송 대상이 있는 방으로 바로 열렸을 때도 그 탭을 대상으로 잡는다.
     const startRoom = roomById(state.roomId);
     if (startRoom.target) saveTarget({ sheet: startRoom.target.sheet, tab: startRoom.target.tab });
@@ -3711,10 +4089,11 @@
     bind();
     bindInstall();
     applyMode();
-    if (state.view !== 'office' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
+    if (state.view !== 'office' && state.view !== 'workflow' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
     $('#app').dataset.view = state.view;
     syncOfficeVisible();
     if (state.view === 'office') renderOffice();
+    else if (state.view === 'workflow') renderWorkflow();
     bootstrapData();
     // 토큰이 없으면 빈 화면에 갇히므로 설정 창을 바로 열어 준다.
     if (window.SADAN_GAS_MODE && !state.config.token) {
