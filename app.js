@@ -2961,6 +2961,32 @@
     return view;
   }
 
+  // 검색 결과가 화면 밖일 수 있으니, 결과 노드들이 보이게 캔버스를 맞춘다.
+  function wfFocusResults(model, L) {
+    const wrap = wfWrapEl();
+    if (!wrap || !wrap.wfParts) return;
+    const W = wrap.wfParts.vp.clientWidth || 0;
+    const H = wrap.wfParts.vp.clientHeight || 0;
+    if (!W || !H) return;
+    const list = [];
+    model.bots.forEach(b => { if (b.count) list.push(L.nodes.get('bot:' + b.id)); });
+    model.hubs.forEach(h => { if (h.count) list.push(L.nodes.get('hub:' + h.id)); });
+    model.chans.forEach(c => { if (c.count) list.push(L.nodes.get('chan:' + c.id)); });
+    const bs = list.filter(Boolean);
+    if (!bs.length) return;
+    const x0 = Math.min.apply(null, bs.map(b => b.x));
+    const x1 = Math.max.apply(null, bs.map(b => b.x + b.w));
+    const y0 = Math.min.apply(null, bs.map(b => b.y));
+    const y1 = Math.max.apply(null, bs.map(b => b.y + b.h));
+    const pad = 46;
+    const s = Math.max(WF_ZOOM_MIN, Math.min(1.1, Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0))));
+    const v = wfViewState();
+    v.s = Math.round(s * 100) / 100;
+    v.x = Math.round((W - (x1 - x0) * v.s) / 2 - x0 * v.s);
+    v.y = Math.round((H - (y1 - y0) * v.s) / 2 - y0 * v.s);
+    wfApplyView();
+  }
+
   function wfPaint(fit) {
     const wrap = wfWrapEl();
     if (!wrap || !wrap.wfParts) return;
@@ -3077,7 +3103,8 @@
     wrap.wfState = { model, L };
     wfDetail(props, model, posts);
     wfApplyFocus();
-    if (fit) wfFitView();
+    if (String(state.wf.q || '').trim() && posts.length) wfFocusResults(model, L);
+    else if (fit) wfFitView();
     else wfApplyView();
     wfRevealDetail();
   }
