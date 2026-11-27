@@ -1139,7 +1139,8 @@
 
   // 💤 휴식(idle) 대원은 라운지 소파로 이동한다. 사장님과 아직 합류 전인 탭 비서는 제외.
   function officeAtLounge(p) {
-    return !!p && !p.tabOnly && p.id !== 'ceo' && p.status === 'idle';
+    // 시트를 아직 못 읽었을 때는 모두를 라운지로 보내지 않는다(빈 사무실이 더 자연스럽다).
+    return !!p && !p.tabOnly && p.id !== 'ceo' && p.status === 'idle' && officeMsgs().length > 0;
   }
 
   function officeBadge(p, status) {
@@ -1955,6 +1956,7 @@
       feed.appendChild(r);
     });
     panel.appendChild(feed);
+    if (!officeMsgs().length) panel.appendChild(el('p', 'pn-loading', '시트를 불러오는 중…'));
     panel.appendChild(el('p', 'pn-foot', '시트 기록으로 근무 상태를 계산해요 · 30분 안 🔥 / 2시간 안 💻 / 그 밖 ☕ / 기록 없음 💤'));
     return panel;
   }

@@ -854,6 +854,7 @@ svg { display: block; }
   background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 0 5px;
 }
 .pn-empty { font-size: 11.5px; color: var(--sub); }
+.pn-loading { font-size: 10.5px; font-weight: 700; color: #8B95A1; background: var(--line-2); border-radius: 8px; padding: 6px 9px; }
 .pn-foot { font-size: 9.5px; color: var(--sub); line-height: 1.6; margin-top: auto; padding-top: 4px; }
 
 /* ── 애니메이션 ── */
