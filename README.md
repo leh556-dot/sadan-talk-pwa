@@ -46,7 +46,12 @@ division-chat-pwa/
 | `06-desktop.png` | PC · 좌측 방 목록 + 우측 대화 |
 | `07-pages-office-live-2026-11-26.png` | PC · 🏢 사단 오피스 (라이브 시트 기준 — 사장방·팀장실·A/B사단 존) |
 | `08-pages-office-seat-popup-2026-11-26.png` | 캐릭터 클릭 → 하단 상세 시트(상태·마지막 활동·최근 기록) |
-| `09-pages-office-demo.png` | 데모 데이터의 오피스 (열일·활동·대기 세 상태) |
+| `09-pages-office-demo.png` | (이전 2D 버전) 데모 데이터의 오피스 |
+| `10-office-isometric-day-2026-11-27.png` | PC · 🏢 사단 오피스 **2.5D 등각 디오라마**(데이라이트) — 지도 + 오늘의 오피스 패널 |
+| `11-office-sakura-2026-11-27.png` | 🌸 벚꽃 라운지 테마 |
+| `12-office-night-2026-11-27.png` | 🌙 나이트 오피스 테마 |
+| `13-office-seat-popup-2026-11-27.png` | 캐릭터 클릭 → 상세 시트(동물 아바타·상태·최근 기록 3건) |
+| `14-office-mobile-2026-11-27.png` | 폰(390×844) · 지도 + 오늘의 오피스 패널 |
 
 > 캡처에는 실제 시트의 최근 기록 일부가 보입니다. 공개 저장소에 올릴 때는 `screenshots/`와 `demo/snapshot.js`를 빼세요.
 
