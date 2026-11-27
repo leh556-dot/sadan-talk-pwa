@@ -2259,9 +2259,19 @@
     return 'M' + r(x1) + ' ' + r(y1) + ' C' + r(x1 + dx) + ' ' + r(y1) + ', ' + r(x2 - dx) + ' ' + r(y2) + ', ' + r(x2) + ' ' + r(y2);
   }
 
+  // 좁은 화면에서는 상세 카드가 캔버스 아래에 있으므로, 고르면 그 카드로 이동시킨다.
+  function wfRevealDetail() {
+    const wrap = document.querySelector('#office .wf-wrap');
+    if (!wrap || !wrap.wfState || !wrap.wfState.L.mobile) return;
+    const det = wrap.wfParts && wrap.wfParts.detail;
+    if (!det || typeof det.scrollIntoView !== 'function') return;
+    det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   function wfSelect(kind, id) {
     state.wf.sel = kind + ':' + id;
     wfPaint();
+    wfRevealDetail();
   }
 
   function wfNodeEl(kind, item, box) {
@@ -2582,6 +2592,7 @@
       const key = n.dataset.kind + ':' + n.dataset.id;
       state.wf.sel = state.wf.sel === key ? null : key;
       wfPaint();
+      wfRevealDetail();
     });
     const hover = (e, on) => {
       const n = e.target && e.target.closest ? e.target.closest('.wf-node') : null;
@@ -2696,6 +2707,7 @@
     const snap = officeSnapshot(officeMsgs());
     state.officeSnap = snap;
     box.dataset.skin = state.skin || 'day';
+    const keepScroll = box.scrollTop;
     box.innerHTML = '';
     // 지도(.ofc-wrap) 아래에 🔀 게시·출고 워크플로우를 이어 붙인다.
     const stack = el('div', 'ofc-stack');
@@ -2703,6 +2715,7 @@
     stack.appendChild(wfWrap());
     box.appendChild(stack);
     wfPaint();
+    if (keepScroll) box.scrollTop = keepScroll;
 
     const sub = $('#chatSub');
     if (sub) {
