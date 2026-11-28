@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="styles.css?v=22" />
+<link rel="stylesheet" href="styles.css?v=23" />
 </head>
 <body>
 <div id="app" class="app" data-view="rooms">
@@ -102,6 +102,9 @@
     <!-- 🔀 사단 워크플로우 — 방 종류가 workflow 일 때 캔버스 + 속성 패널 -->
     <div class="workflow" id="workflow" hidden></div>
 
+    <!-- 🗺️ 채널 담당 지도 — 방 종류가 chanmap 일 때 24개 채널·사람별 요약 -->
+    <div class="chanmap" id="chanmap" hidden></div>
+
     <div class="messages" id="messages" tabindex="0"></div>
 
     <div class="jump-new" id="jumpNew" hidden>새 메시지 <span id="jumpCount">0</span></div>
@@ -164,7 +167,7 @@
 
 <div class="toast" id="toast" role="status"></div>
 
-<script src="demo/snapshot.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="demo/snapshot.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

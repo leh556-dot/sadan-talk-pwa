@@ -64,6 +64,12 @@
         { sheet: 'b', tabs: B_TABS },
         { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
       ]
+    },
+    {
+      id: 'chanmap', name: '채널 담당 지도', emoji: '🗺️', color: '#0EA5E9',
+      desc: '24개 채널 · 누가 쓰고 → 누구에게 주고 → 누가 올리는가',
+      kind: 'chanmap',
+      sources: []
     }
   ];
 
@@ -71,7 +77,7 @@
   const NO_TAG = '태그 없음';
   const TAGS = {
     b: ['@전체', NO_TAG, '@Muse-B', '@피클-B', '@부이-B', '@Hark-B', '@뀨-B', '@키링-B'],
-    a: ['@전체', NO_TAG, '@Muse', '@Instinct', '@뀨', '@키링']
+    a: ['@전체', NO_TAG, '@Muse', '@Instinct', '@뀨', '@키링', '@D피클']
   };
   const titleForTag = (tag) => (tag === NO_TAG || !tag ? '[지시]' : `[지시] ${tag}`);
 
@@ -92,6 +98,8 @@
     'muse (사단장)': { emoji: '🎭', color: '#5B4BD6' },
     '피클': { emoji: '🥒', color: '#2E9E5B' },
     '피클-b': { emoji: '🥒', color: '#2E9E5B' },
+    'd피클': { emoji: '🥒', color: '#22A06B' },
+    '디피클': { emoji: '🥒', color: '#22A06B' },
     'muse-b': { emoji: '🎭', color: '#5B4BD6' },
     '부이': { emoji: '🐣', color: '#E8A11B' },
     '부이-b': { emoji: '🐣', color: '#E8A11B' },
@@ -146,7 +154,9 @@
     skin: loadStoredSkin(),     // 오피스 테마: day · sakura · night
     officeSnap: null,
     // 🔀 워크플로우 화면 상태 — 기간·검색어·선택한 노드·팬/줌
-    wf: { period: 'all', q: '', sel: null, view: null, open: false, fitted: false }
+    wf: { period: 'all', q: '', sel: null, view: null, open: false, fitted: false },
+    // 🗺️ 채널 담당 지도 화면 상태 — 탭(채널·사람·금지)·묶음·검색어·짚은 대원
+    map: { tab: 'chan', group: 'all', q: '', focus: '' }
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -551,17 +561,20 @@
       const body = el('div', 'room-body');
       const top = el('div', 'room-top');
       top.appendChild(el('span', 'room-name', room.name));
+      const isMap = room.kind === 'chanmap';
       const ofc = room.kind === 'office' ? officeSnapshot(msgs) : null;
       const wfp = room.kind === 'workflow' && data ? wfParse(msgs) : null;
       const wfModelMini = wfp ? wfModel(wfp) : null;
       const nBot = wfModelMini ? wfModelMini.bots.filter(b => b.count > 0).length : 0;
       const nChan = wfModelMini ? wfModelMini.chans.filter(c => c.count > 0).length : 0;
-      top.appendChild(el('span', 'room-count', ofc ? ofc.counts.total + '명' : (wfp ? wfp.length + '건' : `${msgs.length}건`)));
+      top.appendChild(el('span', 'room-count', isMap ? MAP_CHANNELS.length + '채널' : (ofc ? ofc.counts.total + '명' : (wfp ? wfp.length + '건' : `${msgs.length}건`))));
       top.appendChild(el('span', 'room-time', last ? fmtRoomTime(last.ts) : ''));
       body.appendChild(top);
 
       const prev = el('div', 'room-preview');
-      if (ofc) {
+      if (isMap) {
+        prev.appendChild(el('span', '', '대원 ' + MAP_PEOPLE.length + '명 · 금지 ' + MAP_BANS.length + ' — 누가 쓰고 누가 올리는지'));
+      } else if (ofc) {
         prev.appendChild(el('span', '', '열일 ' + ofc.counts.working + ' · 활동 ' + ofc.counts.active + ' · 대기 ' + ofc.counts.waiting + ' · 휴식 ' + ofc.counts.idle));
       } else if (wfp) {
         prev.appendChild(el('span', '', '게시·출고 ' + wfp.length + '건 · 봇 ' + nBot + ' · 채널 ' + nChan));
@@ -600,7 +613,9 @@
     state.searchOpen = false;
     $('#searchBar').hidden = true;
     $('#msgSearch').value = '';
-    state.view = room.kind === 'office' ? 'office' : (room.kind === 'workflow' ? 'workflow' : 'chat');
+    state.view = room.kind === 'office' ? 'office'
+      : room.kind === 'workflow' ? 'workflow'
+        : room.kind === 'chanmap' ? 'chanmap' : 'chat';
     if (state.view === 'workflow') state.wf.fitted = false;
     $('#app').dataset.view = state.view;
     syncOfficeVisible();
@@ -608,6 +623,7 @@
     renderChatHead();
     if (state.view === 'office') renderOffice();
     else if (state.view === 'workflow') renderWorkflow();
+    else if (state.view === 'chanmap') renderChanMap();
     else renderMessages();
     markSeen(id);
     if (state.view === 'chat') scrollToBottom(true);
@@ -629,6 +645,11 @@
     if (room.kind === 'workflow') {
       $('#chatSub').textContent = room.desc + ' — 시트 기록에서 자동으로';
       $('#tabFilterLabel').textContent = '게시 흐름';
+      return;
+    }
+    if (room.kind === 'chanmap') {
+      $('#chatSub').textContent = MAP_BASIS.at + ' 기준 · 채널 ' + MAP_CHANNELS.length + '곳 · 대원 ' + MAP_PEOPLE.length + '명';
+      $('#tabFilterLabel').textContent = '채널 지도';
       return;
     }
     $('#chatSub').textContent = tabs ? `${tabs} 탭 · ${room.desc}` : room.desc;
@@ -922,6 +943,7 @@
     { id: 'a-pally', name: 'Pally', emoji: '🕊', role: 'A사단 · 팔리', zone: 'a', side: 'a', color: '#5F7E9E' },
     { id: 'a-kkyu', name: '뀨', emoji: '🐰', role: 'A사단 · 뀨', zone: 'a', side: 'a', color: '#C2569B' },
     { id: 'a-keyring', name: '키링', emoji: '🔑', role: 'A사단 · 키링', zone: 'a', side: 'a', color: '#8A6A3D' },
+    { id: 'a-dpickle', name: 'D피클', emoji: '🥒', role: 'A사단 · D피클 (온보딩)', zone: 'a', side: 'a', color: '#22A06B' },
     { id: 'b-pickle', name: '피클-B', emoji: '🥒', role: 'B사단 · 피클', zone: 'b', side: 'b', color: '#2E9E5B' },
     { id: 'b-booi', name: '부이-B', emoji: '🐣', role: 'B사단 · 부이', zone: 'b', side: 'b', color: '#E8A11B' },
     { id: 'b-hark', name: 'Hark-B', emoji: '🦉', role: 'B사단 · 하크', zone: 'b', side: 'b', color: '#3D6B99' },
@@ -940,6 +962,9 @@
     '뀨': { a: 'a-kkyu', b: 'b-kkyu' },
     'cue': { a: 'a-kkyu', b: 'b-kkyu' },
     '키링': { a: 'a-keyring', b: 'b-keyring' },
+    'd피클': { a: 'a-dpickle' },
+    '디피클': { a: 'a-dpickle' },
+    'dpickle': { a: 'a-dpickle' },
     'instinct': { a: 'a-instinct' },
     '인스팅트': { a: 'a-instinct' },
     'pally': { a: 'a-pally' },
@@ -966,6 +991,7 @@
     'a-pally': { kind: 'bunny', fur: '#C6DDF7', label: '토끼' },
     'a-kkyu': { kind: 'bunny', fur: '#F4A5C8', label: '토끼' },
     'a-keyring': { kind: 'puppy', fur: '#D6A673', label: '포메' },
+    'a-dpickle': { kind: 'otter', fur: '#7BD6A6', label: '수달' },
     'b-pickle': { kind: 'otter', fur: '#77C493', label: '수달' },
     'b-booi': { kind: 'chick', fur: '#FFCE48', label: '병아리' },
     'b-hark': { kind: 'owl', fur: '#93AED3', label: '올빼미' },
@@ -2007,6 +2033,601 @@
       setTimeout(() => seat.classList.remove('hl'), 2600);
     }
     openSeatSheet(p);
+  }
+
+  /* ═════════ 🗺️ 채널 담당 지도 ═════════
+     2026-11-28 20:30 기준 Muse(사단장)가 정리한 「사단 채널별 담당 지도」를 앱에 옮긴 것.
+     채널마다 '누가 쓰고 → 누구에게 주고 → 누가 올리는지' + 계정·현황·금지 사항을 한 장에,
+     사람별 요약과 '시키면 안 되는 일'까지 같은 화면에서 본다. 시트를 읽지 않는 정적 지도다. */
+  const MAP_BASIS = {
+    at: '2026-11-28 20:30',
+    by: 'Muse (사단장)',
+    title: '사단 채널별 담당 지도',
+    survey: ['A-피클 148행', 'C피클 4행', 'Muse-B 710행', 'Pally 2,249행', 'Hark 838행', '부이-B 1,016행'],
+    todo: 'B피클·Instinct·부이·Folk·Grok·키링·뀨 전수조사는 미제출 — 그 부분은 Muse 보유 기록 기준([미확인])',
+    note: '이 문서는 정본이 아니다. 전수조사 마감(11-29 18:00) 후 종합 보고 때 갱신하고, 채널 담당이 바뀌면 고친다.'
+  };
+
+  const MAP_GROUPS = [
+    { id: 'all', label: '전체' },
+    { id: 'sil', label: '실속템' },
+    { id: 'sf', label: 'Studio Forme' },
+    { id: 'blog', label: '블로그·애드센스' },
+    { id: 'ops', label: '운영·공통' }
+  ];
+  const MAP_GROUP_LABEL = {};
+  MAP_GROUPS.forEach(g => { if (g.id !== 'all') MAP_GROUP_LABEL[g.id] = g.label; });
+
+  // 한 줄 요약 — 지도에 적힌 사람별 요약 그대로.
+  const MAP_PEOPLE = [
+    { id: 'muse', icon: '🎭', name: 'Muse', role: 'A사단장', band: 'A',
+      line: '글로벌 기획·문서화·검수·납품 + 직접 제작(모든 이미지 #98 · 영상 조립 · OGQ 제출 · 공모전 제출 #48 · WP 직접 입력). 대원 자료를 종합해 완성품을 만든다.' },
+    { id: 'a.pkl', icon: '🥒', name: 'A-피클', role: '피클 군단장', band: '피클',
+      line: '한국 현장 실행·발행 전담 — 실속템 블로그·당근 카페·스마트스토어·티스토리(일시정지)·실속템 인스타/틱톡/쇼츠 업로드·체험단 신청. 릴스/클립은 MP4+캡션 전달 후 라운 폰 게시(방식 혼재 — 건별 확인).' },
+    { id: 'b.pkl', icon: '🥒', name: 'B피클', role: '@laun8 · B사단 소속 피클', band: '피클',
+      line: 'Studio Forme 4곳(Gumroad·Ko-fi·마플샵·툴디) + CTEE 전담 + 실속템 7호 블로그·인스타·리틀리. B사단 소속이면서 피클 군단 일원.' },
+    { id: 'c.pkl', icon: '🥒', name: 'C피클', role: '@laun21 · A-피클 서포트', band: '피클',
+      line: '건강 티스토리 매일 1편 발행 + 핀터 룸앤무드 1핀/일 + Studio Forme 에셋 가공·분할 + Python 팩트 그래프 + 사단 관제판. 게시 불가 채널: 인스타·OGQ·CTEE·Medium(미연동).' },
+    { id: 'd.pkl', icon: '🥒', name: 'D피클', role: '온보딩 중 · A-피클 서포트 예정', band: '피클', isNew: true,
+      line: '온보딩 중(지시문 작성 중, 별도 작업 중). A사단 소속, A-피클 서포트 예정. 계정 leh556@gmail.com + GitHub @leh556-dot. 담당: 대시보드·깃허브 정리, 메일·일정·공모전 추적 등.' },
+    { id: 'bmuse', icon: '🎭', name: 'B뮤즈', role: 'Muse-B · B사단장', band: 'B',
+      line: 'B사단 지휘 + Studio Forme 전 채널(인스타·핀터·유튜브 쇼츠·Medium 초안). 외부 플랫폼 직접 업로드는 Studio Forme 채널만. 공모전 제출 안 함.' },
+    { id: 'pklb', icon: '🥒', name: '피클-B', role: 'B사단 피클', band: 'B',
+      line: '도구 20개 구축(selftest 822/822). A-피클 서포트(사전 준비·조사·검증). A-피클 계정 로그인이 필요한 발행·결제·제출은 직접 안 함.' },
+    { id: 'pally', icon: '🕊', name: 'Pally', role: 'A사단 · 기획·조사', band: 'A',
+      line: '기획·워크플로·조사만. 이미지 절대 금지(#98). 외부 채널 업로드·신청·제출 없음 — 조사·기획안·근거표를 Muse에게 전달.' },
+    { id: 'instinct', icon: '⚡', name: 'Instinct', role: 'A사단 · 자료·숫자', band: 'A',
+      line: '자료 수집·수익 추적·숫자. GitHub 스킬/도구 검색만(설치 안 함). 공모전 2차 대조.' },
+    { id: 'booi', icon: '🐣', name: '부이', role: 'A사단 · 대량 수집', band: 'A',
+      line: '대량 수집·표 정리(토큰 무제한). 전문 분야 과제 1~2건/사이클.' },
+    { id: 'b.booi', icon: '🐣', name: '부이-B', role: 'B사단 · 원문 검증', band: 'B',
+      line: '공개 웹 조사·원문 검증·더블체크 보조. 업로드·제출 없음.' },
+    { id: 'hark', icon: '🦉', name: 'Hark', role: 'B사단 · 영상 콘티·훅', band: 'B',
+      line: '영상 콘티·훅·품질(고유 전문만, 한도 작음). 조사·원문 대조·사실 검증·콘티·의견서를 Muse에게 전달. 외부 채널 게시·제출 없음.' },
+    { id: 'folk', icon: '🐦', name: 'Folk', role: '경량 검수·모니터링', band: 'B',
+      line: '경량 검수·모니터링(한도 적당). 소셜 포스트 검토 요약.' },
+    { id: 'keyring', icon: '🔑', name: '키링', role: 'A사단 · 공공 혜택', band: 'A',
+      line: '공공 혜택·생활비 방어(한도 작음, 29사이클 침묵 — 2027 지원사업 조사는 부이 Failover 중).' },
+    { id: 'b.keyring', icon: '🔑', name: '키링-B', role: 'B사단 · Studio Forme 준비', band: 'B',
+      line: 'Studio Forme 워터컬러 프로젝트 준비(Behance 보류 중). 공모전 조사.' },
+    { id: 'grok', icon: '🌀', name: 'Grok', role: 'X 트렌드·메일', band: 'B',
+      line: 'X 트렌드·메일 기반(3시간 주기, 1메일 1과제 600자 이내). 부분 제출 잦음(메일 절단).' },
+    { id: 'kkyu', icon: '🐰', name: '뀨', role: 'Cue · 팩트체크·SEO', band: 'A',
+      line: '블로거·WP 루틴 전담(복귀 완료 11-28, 한도 작음). 10·11호 확인 + 스킬 검수, 15호~ 예약발행.' },
+    { id: 'webai', icon: '✨', name: 'Gemini · Claude · Fig', role: '웹AI', band: '웹AI',
+      line: '핵심 경로 제외(#82). 보조 조사·핀포인트만. Gemini 보조 조사, Claude 영문 카피 핀포인트, Fig 모바일 현장 검수.' }
+  ];
+  const MAP_PEOPLE_BY_ID = {};
+  MAP_PEOPLE.forEach(p => { MAP_PEOPLE_BY_ID[p.id] = p; });
+  const mapPersonOf = (id) => MAP_PEOPLE_BY_ID[id] || { id: id, icon: '•', name: id, role: '' };
+
+  const MAP_CHANNELS = [
+    { no: 1, group: 'sil', icon: '🟢', name: '실속템 네이버 블로그', where: 'blog.naver.com/silsoktem',
+      account: 'silsoktem (네이버)',
+      writes: 'Muse 초안 + A-피클 직접 작성·발행(6호 3·4·5편)',
+      route: 'Muse 탭에 초안 적재 → A-피클이 3시간마다 수거',
+      posts: 'A-피클 · B피클 전담 — B피클이 7호 발행(11-28 11:12)',
+      status: '7호 발행 완료 · 8호 스마트플러그 준비 중(마감 11-30 18:00)',
+      forbid: 'Pally·Instinct·부이 등 A사단 대원은 초안·자료까지만. 발행은 A-피클/B피클만. Muse는 발행하지 않음.',
+      who: ['muse', 'a.pkl', 'b.pkl', 'pally', 'instinct', 'booi'] },
+    { no: 2, group: 'blog', icon: '📔', name: '건강 티스토리', where: 'everythingtopic.tistory.com',
+      account: 'everythingtopic',
+      writes: 'Muse 초안(아침 07:00 루틴) + C피클 매일 1편 직접 작성',
+      route: 'Muse 탭 초안 → C피클이 수거 · C피클 본인 탭에 결과 적재',
+      posts: 'C피클 매일 1편 공개 발행(현재 80호까지). A-피클 티스토리 루틴은 일시정지',
+      status: 'C피클이 매일 1편 발행 중 · 서치어드바이저 소유확인 완료',
+      forbid: '타로 티스토리(hoohra)는 건들지 마(#89) — 애드센스 승인됨, 라운 명시 지시 있을 때만.',
+      who: ['muse', 'c.pkl', 'a.pkl'] },
+    { no: 3, group: 'blog', icon: '⛔', name: '타로 티스토리 — 건들지 마', where: 'hoohra.tistory.com',
+      account: 'hoohra',
+      writes: '(평상시) 아무도 안 함',
+      route: '라운 명시 지시가 있을 때만 그 건에 한해',
+      posts: '— (C피클이 서치어드바이저 메타태그만 1회 반영, 글 미발행)',
+      status: '건들지 마(#89) · 애드센스 승인됨 · 타로 유입의 약 99%는 인스타 DM 경유',
+      forbid: '전원 금지 — 라운 명시 지시 없이 아무도 손대지 않는다.',
+      who: ['c.pkl'] },
+    { no: 4, group: 'blog', icon: '🔮', name: '타로 네이버 블로그', where: 'blog.naver.com/rauntarot',
+      account: 'rauntarot (네이버 · leh556)',
+      writes: '체험단 후기 = 체험단 신청자가 작성',
+      route: '후기는 타로 블로그 체험단 카테고리 글로만',
+      posts: 'A-피클 (체험단 후기 발행, 라운 직접 지시 루틴)',
+      status: '체험단 후기 채널 · 타로 유입 약 99%가 인스타 DM 경유',
+      forbid: '체험단 글은 타로 블로그 체험단 카테고리로만 작성(일반 글로 올리지 않음).',
+      who: ['a.pkl', 'muse'] },
+    { no: 5, group: 'blog', icon: '🌐', name: '워드프레스', where: 'lifetopic.ct.ws',
+      account: 'lifetopic_admin',
+      writes: 'Muse (뀨가 없을 때, 애드센스 준비) + 뀨 (블로거·WP 루틴 전담)',
+      route: 'Muse가 직접 WP 관리자에 입력',
+      posts: 'Muse 12·13·14호 예약 발행(11-30·12-01·12-02 09:00) · 뀨가 15호~ 예약발행',
+      status: '12-02까지 나가면 17편(애드센스 15편 목표 초과) · 애드센스 신청 12-05~08 목표',
+      forbid: '',
+      who: ['muse', 'kkyu'] },
+    { no: 6, group: 'blog', icon: '📝', name: '구글 블로그 (Blogger)', where: 'blogger.com',
+      account: '[미확인] — 라운 확인 필요',
+      writes: '뀨 (블로거 루틴 전담) + Muse (뀨 없을 때 대신 올리기도 함)',
+      route: '뀨가 직접 발행',
+      posts: '뀨 — 10·11호 확인 + 스킬 검수, 15호~ 예약발행',
+      status: '블로거·WP 각 공개 글 13편(선행 6편 기록은 오류로 정정) · 애드센스 신청 12-04~07 목표',
+      forbid: '',
+      who: ['kkyu', 'muse'] },
+    { no: 7, group: 'sil', icon: '🥕', name: '당근 카페 (부산 짠테크 요정들)', where: 'cafe.daangn.com',
+      account: '닉네임 알뜰부산러',
+      writes: 'A-피클 직접 작성',
+      route: 'C피클이 티스토리 발행 글을 09:23 외부 유입과 연계',
+      posts: 'A-피클 (매일 09:23 · 19:27)',
+      status: '매일 2회 발행',
+      forbid: '당근 자동화·다계정·봇 절대 금지(약관 제17조②) · 부캐 중복 운영 금지.',
+      who: ['a.pkl', 'c.pkl'] },
+    { no: 8, group: 'sil', icon: '📸', name: '실속템 인스타그램', where: '@silsoktem',
+      account: '@silsoktem',
+      writes: 'Muse 카드뉴스 제작(6호·7호 7장씩) + A-피클',
+      route: 'Muse 탭·파일로 완성본 전달 → A-피클이 수거',
+      posts: 'A-피클 (6호 11-27 20:27 · 7호 11-28 13:36 게시)',
+      status: '7호 게시 완료 · A사단 전담(만들기 Muse, 올리기 A-피클)',
+      forbid: 'Pally 이미지 절대 금지(#98) — 카드뉴스·썸네일 포함 모든 이미지는 Muse만. B피클은 올리지 않음(블로그+리틀리만).',
+      who: ['muse', 'a.pkl', 'pally', 'b.pkl'] },
+    { no: 9, group: 'sil', icon: '🎵', name: '실속템 틱톡', where: '@silsoktem',
+      account: '@silsoktem',
+      writes: 'Muse 숏폼 영상 제작(3호 v6 완성, 61.87초)',
+      route: 'MP4 + 캡션 → A-피클에게 전달',
+      posts: 'A-피클 (1호 · 2호 v3 게시, 2호 11-28 08:22 확인)',
+      status: '3호 v6 완성·미발행 — 게시 주체 미정(A-피클 토큰 소진)',
+      forbid: '게시 방식 혼재 — A피클 전수조사에는 "MP4+캡션만 전달, 라운 폰 직접 게시". 건별 라운 확인 필요.',
+      who: ['muse', 'a.pkl'] },
+    { no: 10, group: 'sil', icon: '🎬', name: '실속템 유튜브 쇼츠', where: '@silsoktem_kr',
+      account: '@silsoktem_kr',
+      writes: 'Muse 숏폼 영상 제작',
+      route: 'MP4 + 캡션 → A-피클',
+      posts: 'A-피클 (1호 · 2호 게시 확인)',
+      status: '3호 미발행(v6 완성, 게시 주체 미정)',
+      forbid: '네이버 클립 안 함(#96) — 실속템 릴스는 쇼츠·틱톡·인스타 3곳만.',
+      who: ['muse', 'a.pkl'] },
+    { no: 11, group: 'sil', icon: '📌', name: '실속템 핀터레스트 (룸앤무드)', where: 'pinterest.com/shortpong6990',
+      account: '@shortpong6990 / shortpong6990@gmail.com',
+      writes: 'C피클 매일 1핀 준비(쿠팡↔쇼핑커넥트 1:1 교대) + Muse 총괄·검수',
+      route: 'Muse 총괄 → C피클이 매일 1핀 발행',
+      posts: 'A-피클 또는 C피클 (현재 13호까지 발행)',
+      status: '총 15핀 · 13호 LED 스탠드 11-28 08:45 · 14호 11-29 예정',
+      forbid: 'A-피클 루틴은 일시정지 — 담당은 C피클(매일 1핀) + Muse 총괄.',
+      who: ['c.pkl', 'muse', 'a.pkl'] },
+    { no: 12, group: 'sf', icon: '📸', name: 'Studio Forme 인스타그램', where: '@studioformekr',
+      account: '@studioformekr',
+      writes: 'B뮤즈 (홍보 릴스·캐러셀 제작)',
+      route: 'B뮤즈가 개설·게시까지 담당',
+      posts: 'B뮤즈 (홍보 릴스 11-27 19:57 게시)',
+      status: 'Studio Forme 인스타 전담 = B뮤즈',
+      forbid: 'A-피클 금지 — A-피클은 실속템 인스타만.',
+      who: ['bmuse', 'a.pkl'] },
+    { no: 13, group: 'sf', icon: '📌', name: 'Studio Forme 핀터레스트', where: 'pinterest.com/studioformekr',
+      account: 'studioformekr@gmail.com',
+      writes: 'B뮤즈 핀 초안 (키링-B가 워터컬러 프로젝트 준비)',
+      route: 'B뮤즈가 직접 게시',
+      posts: 'B뮤즈 (pin-01 두들 · pin-02 워터컬러 게시 확인)',
+      status: 'pin-04 픽셀 준비 중 · pin-03 아이소메트릭·pin-07 모노라인은 화풍 제한으로 보류(라운 지시) · Behance 잠시 멈춤(#97)',
+      forbid: 'A-피클·C피클 금지 — 담당 B뮤즈.',
+      who: ['bmuse', 'b.keyring', 'a.pkl', 'c.pkl'] },
+    { no: 14, group: 'sf', icon: '✍️', name: 'Studio Forme Medium', where: 'medium.com/@studioformekr',
+      account: '@studioformekr',
+      writes: 'B뮤즈 초안 작성',
+      route: 'B뮤즈 초안 → A-피클에게 전달해 발행 (13:09 변경)',
+      posts: 'A-피클 (1호 게시됨)',
+      status: '2호 워터컬러 초안 완료 — 발행은 라운 결정 대기',
+      forbid: 'C피클은 Medium 게시 불가(미연동).',
+      who: ['bmuse', 'a.pkl', 'c.pkl'] },
+    { no: 15, group: 'sf', icon: '🎬', name: 'Studio Forme 유튜브 쇼츠', where: '@studioformekr',
+      account: '@studioformekr',
+      writes: 'B뮤즈 (홍보 영상 제작)',
+      route: 'B뮤즈가 직접 게시',
+      posts: 'B뮤즈 (v4 홍보 영상 11-28 00:09 게시)',
+      status: '—',
+      forbid: '',
+      who: ['bmuse'] },
+    { no: 16, group: 'sf', icon: '🛒', name: 'Studio Forme 에셋 플랫폼', where: 'Gumroad · Ko-fi · 마플샵 · 툴디 · itch.io · Payhip · BOOTH',
+      account: 'shortpong6990@gmail.com (기존 스토어) · studioformekr@gmail.com (새 마케팅 채널)',
+      writes: 'Muse 에셋 제작(일러스트 번들·프롬프트팩) + B뮤즈 기획·초안',
+      route: 'B피클 4곳 전담(Gumroad·Ko-fi·마플샵·툴디) · A-피클도 shortpong6990 계정 관리',
+      posts: 'B피클(@laun8) · A-피클(shortpong6990 계정)',
+      status: 'itch.io 메가 번들 3종 공개(두들·아이소메트릭·워터컬러 각 $24.99) · 메가 픽셀아트 $14.99 변경은 11-29 Gumroad 비번 정리 후(#99)',
+      forbid: '가격 변경은 라운 명시 승인 없이 금지(현행: 2호 $7.99 · 3호 $9.99 · 4호 $9.99 · 메가 $24.99 · 플레이북 $12.99). Adobe Stock 업로드는 라운 직접.',
+      who: ['muse', 'bmuse', 'b.pkl', 'a.pkl'] },
+    { no: 17, group: 'sf', icon: '🧡', name: 'CTEE (크티)', where: 'ctee.kr/place/studioforme',
+      account: 'shortpong6990@gmail.com',
+      writes: 'Muse 번들·무료 샘플팩 직접 제작 + 대원 초안(프롬프트팩·체크리스트팩·노션 템플릿)',
+      route: 'B피클 전담(11-29부터 루틴 시작) · A-피클이 플레이스 개설 + 2종 등록·발행',
+      posts: 'B피클 · A-피클',
+      status: '1차 2종 발행(번들 5,900원 · 샘플팩 0원) · 프롬프트팩 9,900원 라운 확정 대기',
+      forbid: '정산 계좌·연락처 인증 미등록 — 라운 직접 필요, 현재 정산 불가. C피클은 CTEE 게시 불가(미연동).',
+      who: ['muse', 'b.pkl', 'a.pkl', 'c.pkl'] },
+    { no: 18, group: 'sf', icon: '🎨', name: 'OGQ 스티커·컬러링·스톡·음원', where: 'creators.ogq.me',
+      account: 'silsoktem@naver.com (닉네임 StudioForme)',
+      writes: 'Muse 전담 — 스티커·컬러링·스톡 이미지·음원 전부 직접 제작',
+      route: 'Muse가 브라우저에서 직접 제출',
+      posts: 'Muse (스티커 슬롯 클릭만 라운이 일요일 직접)',
+      status: '심사중 129건(전체 144 = 판매중 15 + 심사중 129 + 반려 0) · 10탄 오리 제출 · SET11 래서판다 판다미 일요일 슬롯 예정',
+      forbid: '피클 완전 제외(#93) — 피클·Muse-B 경유 제출 요청 중단. Pally 이미지 절대 금지(#98).',
+      who: ['muse', 'pally'] },
+    { no: 19, group: 'sil', icon: '🏬', name: '스마트스토어 호오라', where: 'smartstore.naver.com (HOOHRA)',
+      account: 'leh556 (호오라)',
+      writes: 'A-피클 상품 자료 수집·정리 + Muse 기획·검수',
+      route: 'A-피클이 매일 루틴으로 등록(스피드고·도매매)',
+      posts: 'A-피클 (매일 08:47 및 지시 시)',
+      status: '10종 출고 + 라이브 확인 완료(2026-11-28) · 위탁판매',
+      forbid: '고마진 원칙 — 건당 순마진 5,000~8,000원 이상만.',
+      who: ['a.pkl', 'muse'] },
+    { no: 20, group: 'ops', icon: '🎞️', name: '영상 제작 (숏폼·릴스 — 실속템·공모전)', where: 'ffmpeg · ASS 자막 · Qwen Sohee TTS',
+      account: '—',
+      writes: 'Muse 직접 조립(ffmpeg·ASS 자막·Qwen Sohee TTS) · 콘티·훅·품질은 Hark',
+      route: 'Hark 콘티·훅·품질 검수 → Muse 조립',
+      posts: 'Muse (3호 v6 완성)',
+      status: '렌더 검수 3종(ffprobe 프레임 수 · 타임스탬프 3프레임 육안 · 라우드니스) 없이 완료 보고 금지 · 자막-음성 싱크 전수 대조',
+      forbid: 'Pally 이미지 절대 금지(#98) · Edge TTS·ElevenLabs 무료는 상업·공모전용 금지 · 숏폼은 당장 제작하지 않고 바이럴 분석·스킬 향상 우선(타로 릴스 훅·매경 출품만 예외).',
+      who: ['muse', 'hark', 'pally'] },
+    { no: 21, group: 'ops', icon: '🎯', name: '공모전·설문 제출', where: '신청·제출·메일·폼',
+      account: '—',
+      writes: '찾기 = Pally·Instinct·부이·부이-B·키링-B (찾기·조사·검수까지만)',
+      route: 'Muse 감사 파일 대조 + Instinct 2차 대조 → 폼 채운 뒤 라운이 직접 제출 버튼(#28)',
+      posts: 'Muse만 (#48) · 클라우드 브라우저 제출 금지',
+      status: '해야 될 것: 시시한 그림책(11-30) · 건강보험 RE:BOOM(12-04) · 깨노니 CM송(12-08) · 밀양아리랑 포스터(12/11) · 충남 교통안전 포스터(12/11) · VIVID RE:PLAY(12-13) · AI 불씨(12-20)',
+      forbid: '대원 전원 제출 금지 — 찾기·검수까지만. ①자격 먼저(부산 거주 성인) ②SNS 영상 업로드 필요 건 제외 ③블로그 글 요구는 상금 2만원 이상만 ④직접 촬영 없이 AI만으로 ⑤쉬운 것만.',
+      who: ['muse', 'pally', 'instinct', 'booi', 'b.booi', 'b.keyring'] },
+    { no: 22, group: 'ops', icon: '🎁', name: '체험단 신청·후기', where: '레뷰 · 리뷰노트 · 리뷰플레이스 등',
+      account: '개인정보 마스킹 원칙(전화·이메일 평문 노출 금지)',
+      writes: '찾기 = 피클·Hark·Muse (찾은 건 전부 보고, 선택은 라운)',
+      route: '신청 → 후기는 신청자가 타로 블로그 체험단 카테고리에 작성',
+      posts: '신청 = A-피클 + Hark + Muse(#95, 피클·Hark 신청분과 중복 제외)',
+      status: '오늘 신청 총 14건(09:26 크론 5 + 피클 9) · 다음 발표 11-30',
+      forbid: '음식 위주·화장품/뷰티 OK · 공부·학습류·안경류 제외 · 선결제 제외 · 별도 영상 게시 필수 제외 · 방문형은 부산 서면~하단 술집/밥집만.',
+      who: ['a.pkl', 'hark', 'muse'] },
+    { no: 23, group: 'sil', icon: '🔗', name: '리틀리', where: 'litt.ly/silsoktem',
+      account: 'litt.ly/silsoktem',
+      writes: 'B피클 (네이버 블로그 + 리틀리 세트)',
+      route: 'B피클이 직접 발행',
+      posts: 'B피클 (7호 리틀리 발행 완료)',
+      status: '—',
+      forbid: '',
+      who: ['b.pkl'] },
+    { no: 24, group: 'ops', icon: '🗂️', name: '사단 관제판·시트·노션 (내부 운영)', where: 'sadan-dashboard.pages.dev · GitHub @leh556-dot · Cloudflare Pages',
+      account: 'A시트 Instinct 요청함 · 노션 Tasks DB',
+      writes: 'C피클 관제판 제작·3시간 동기화 · D피클(온보딩 중) 대시보드·깃허브 정리 담당',
+      route: '시트 적재 = 노션 동시 적재(예외 없음) — A-피클이 노션 Tasks DB 관리',
+      posts: '각 대원이 본인 탭에 결과 적재 · A-피클이 노션 관리',
+      status: '보고는 낮에는 조용히 처리, 결정·예외만 보고. 매일 밤 22:00 하루치 전부 숫자로 보고',
+      forbid: '시트 적재와 노션 적재를 따로 하지 않는다(동시 적재 예외 없음).',
+      who: ['c.pkl', 'd.pkl', 'a.pkl', 'muse'] }
+  ];
+
+  // 시키면 안 되는 일 — 헷갈리기 쉬운 것.
+  const MAP_BANS = [
+    { what: '이미지 제작 (카드뉴스·썸네일·합성·편집 전부)', who: ['pally'], owner: 'Muse (#98 절대 금지)' },
+    { what: 'OGQ 제출', who: ['a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'pklb', 'pally'], owner: 'Muse (#93 · 스티커 슬롯 클릭만 라운 일요일)' },
+    { what: '공모전·설문 제출', who: ['pally', 'instinct', 'booi', 'b.booi', 'b.keyring', 'hark', 'folk', 'grok'], owner: 'Muse만 (#48)' },
+    { what: '실속템 인스타그램 올리기', who: ['b.pkl'], owner: 'A-피클 (B피클은 블로그+리틀리만)' },
+    { what: 'Studio Forme 인스타그램 올리기', who: ['a.pkl'], owner: 'B뮤즈' },
+    { what: '핀터레스트 실속템(룸앤무드)', who: ['a.pkl'], owner: 'C피클 (매일 1핀) + Muse 총괄' },
+    { what: '핀터레스트 Studio Forme', who: ['a.pkl', 'c.pkl'], owner: 'B뮤즈' },
+    { what: '타로 티스토리 (hoohra)', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'bmuse'], owner: '아무도 안 건드림 (#89)' },
+    { what: '네이버 클립', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl'], owner: '안 함 (#96 · 쇼츠·틱톡·인스타 3곳만)' },
+    { what: 'Gumroad 가격 변경', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'bmuse'], owner: '라운 승인 후 실행' },
+    { what: 'Adobe Stock 업로드', who: ['a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'bmuse', 'pklb'], owner: '라운 직접' },
+    { what: '당근 자동화·다계정·봇', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'pklb'], owner: '수동만 (약관 제17조③)' }
+  ];
+
+  const mapChannelsOf = (pid) => MAP_CHANNELS.filter(c => (c.who || []).indexOf(pid) >= 0);
+  const mapBansOf = (pid) => MAP_BANS.filter(b => (b.who || []).indexOf(pid) >= 0);
+  const mapNorm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').toLowerCase();
+
+  function mapRenderShell() {
+    const box = $('#chanmap');
+    if (!box) return;
+    box.innerHTML = '';
+    const wrap = el('div', 'mp-wrap');
+
+    const bar = el('div', 'mp-topbar');
+    const top = el('div', 'mp-top');
+    const title = el('div', 'mp-title');
+    title.appendChild(el('b', '', '🗺️ ' + MAP_BASIS.title));
+    title.appendChild(el('i', '', '누가 쓰고 → 누구에게 주고 → 누가 올리는지 · ' + MAP_BASIS.at + ' 기준 · ' + MAP_BASIS.by));
+    top.appendChild(title);
+
+    const seg = el('div', 'mp-seg');
+    seg.id = 'mpSeg';
+    [['chan', '채널 ' + MAP_CHANNELS.length], ['people', '사람 ' + MAP_PEOPLE.length], ['ban', '금지 ' + MAP_BANS.length]]
+      .forEach(([id, label]) => {
+        const b = el('button', 'mp-tab', label);
+        b.type = 'button';
+        b.dataset.maptab = id;
+        seg.appendChild(b);
+      });
+    top.appendChild(seg);
+    bar.appendChild(top);
+
+    const meta = el('div', 'mp-meta');
+    MAP_BASIS.survey.forEach(s => meta.appendChild(el('span', 'mp-survey', s)));
+    meta.appendChild(el('span', 'mp-basis-note', '전수조사 반영 · ' + MAP_BASIS.todo));
+    bar.appendChild(meta);
+
+    const tools = el('div', 'mp-tools');
+    const groups = el('div', 'mp-groups');
+    groups.id = 'mpGroups';
+    MAP_GROUPS.forEach(g => {
+      const b = el('button', 'mp-gchip');
+      b.type = 'button';
+      b.dataset.mapgroup = g.id;
+      b.appendChild(el('span', '', g.label));
+      b.appendChild(el('b', '', String(g.id === 'all' ? MAP_CHANNELS.length : MAP_CHANNELS.filter(c => c.group === g.id).length)));
+      groups.appendChild(b);
+    });
+    tools.appendChild(groups);
+
+    const search = el('div', 'mp-search');
+    const inp = document.createElement('input');
+    inp.type = 'search';
+    inp.id = 'mpSearch';
+    inp.placeholder = '채널 · 계정 · 대원 검색';
+    inp.autocomplete = 'off';
+    inp.setAttribute('aria-label', '채널·계정·대원 검색');
+    search.appendChild(inp);
+    tools.appendChild(search);
+    bar.appendChild(tools);
+    wrap.appendChild(bar);
+
+    const body = el('div', 'mp-body');
+    body.id = 'mpBody';
+    wrap.appendChild(body);
+    box.appendChild(wrap);
+  }
+
+  function mapSyncShell() {
+    const st = state.map;
+    document.querySelectorAll('#mpSeg .mp-tab').forEach(b => b.classList.toggle('active', b.dataset.maptab === st.tab));
+    document.querySelectorAll('#mpGroups .mp-gchip').forEach(b => b.classList.toggle('active', b.dataset.mapgroup === st.group));
+    const groups = $('#mpGroups');
+    if (groups) groups.hidden = st.tab !== 'chan';
+    const inp = $('#mpSearch');
+    if (inp && inp.value !== (st.q || '')) inp.value = st.q || '';
+  }
+
+  function mapChannelCard(c) {
+    const card = el('article', 'mp-card');
+    card.dataset.cno = String(c.no);
+    const head = el('div', 'mp-card-head');
+    head.appendChild(el('span', 'mp-no', String(c.no)));
+    head.appendChild(el('span', 'mp-ico', c.icon));
+    const nm = el('div', 'mp-name');
+    nm.appendChild(el('b', '', c.name));
+    if (c.where) nm.appendChild(el('i', '', c.where));
+    head.appendChild(nm);
+    head.appendChild(el('span', 'mp-band', MAP_GROUP_LABEL[c.group] || ''));
+    card.appendChild(head);
+
+    const flow = el('div', 'mp-flow');
+    [['쓴다', c.writes], ['준다', c.route], ['올린다', c.posts]].forEach(pair => {
+      const row = el('div', 'mp-step');
+      row.appendChild(el('em', '', pair[0]));
+      row.appendChild(el('span', '', pair[1] || '—'));
+      flow.appendChild(row);
+    });
+    card.appendChild(flow);
+
+    if (c.account) {
+      const r = el('div', 'mp-row mp-acct');
+      r.appendChild(el('em', '', '계정'));
+      r.appendChild(el('span', '', c.account));
+      card.appendChild(r);
+    }
+    if (c.status) {
+      const r = el('div', 'mp-row');
+      r.appendChild(el('em', '', '현황'));
+      r.appendChild(el('span', '', c.status));
+      card.appendChild(r);
+    }
+    if (c.forbid) {
+      const r = el('div', 'mp-row mp-forbid');
+      r.appendChild(el('em', '', '금지'));
+      r.appendChild(el('span', '', c.forbid));
+      card.appendChild(r);
+    }
+    if (c.who && c.who.length) {
+      const who = el('div', 'mp-who');
+      c.who.forEach(id => {
+        const p = mapPersonOf(id);
+        const b = el('button', 'mp-who-chip', p.icon + ' ' + p.name);
+        b.type = 'button';
+        b.dataset.mapperson = id;
+        b.title = p.name + ' — 맡은 채널·금지 사항 보기';
+        who.appendChild(b);
+      });
+      card.appendChild(who);
+    }
+    return card;
+  }
+
+  function mapPersonCard(p) {
+    const card = el('article', 'mp-person' + (p.isNew ? ' is-new' : ''));
+    card.dataset.pid = p.id;
+    const head = el('div', 'mp-card-head');
+    head.appendChild(el('span', 'mp-ico', p.icon));
+    const nm = el('div', 'mp-name');
+    nm.appendChild(el('b', '', p.name));
+    nm.appendChild(el('i', '', p.role));
+    head.appendChild(nm);
+    if (p.isNew) head.appendChild(el('span', 'mp-new-tag', 'NEW'));
+    head.appendChild(el('span', 'mp-band', p.band));
+    card.appendChild(head);
+    card.appendChild(el('p', 'mp-person-line', p.line));
+
+    const chans = mapChannelsOf(p.id);
+    card.appendChild(el('div', 'mp-sub', '맡는 채널 ' + chans.length + '곳'));
+    const chips = el('div', 'mp-chips');
+    if (!chans.length) chips.appendChild(el('span', 'mp-chip mp-chip-none', '전담 채널 없음'));
+    chans.forEach(c => {
+      const b = el('button', 'mp-chip', c.no + '. ' + c.name);
+      b.type = 'button';
+      b.dataset.mapchan = String(c.no);
+      chips.appendChild(b);
+    });
+    card.appendChild(chips);
+
+    const bans = mapBansOf(p.id);
+    if (bans.length) {
+      card.appendChild(el('div', 'mp-sub', '금지 ' + bans.length + '건'));
+      const bc = el('div', 'mp-chips');
+      bans.forEach(b => bc.appendChild(el('span', 'mp-chip mp-ban-chip', b.what)));
+      card.appendChild(bc);
+    }
+    return card;
+  }
+
+  function mapHitChannel(c, q) {
+    const bag = [c.name, c.where, c.account, c.writes, c.route, c.posts, c.status, c.forbid]
+      .concat((c.who || []).map(id => { const p = mapPersonOf(id); return p.name + ' ' + p.role; }))
+      .join(' ');
+    return mapNorm(bag).indexOf(q) >= 0;
+  }
+  function mapHitPerson(p, q) {
+    const bag = [p.name, p.role, p.band, p.line]
+      .concat(mapChannelsOf(p.id).map(c => c.name)).join(' ');
+    return mapNorm(bag).indexOf(q) >= 0;
+  }
+
+  function mapRenderBody() {
+    const body = $('#mpBody');
+    if (!body) return;
+    const st = state.map;
+    const q = mapNorm(st.q).trim();
+    body.innerHTML = '';
+
+    if (st.tab === 'people') {
+      const list = MAP_PEOPLE.filter(p => !q || mapHitPerson(p, q));
+      const cnt = el('div', 'mp-count');
+      cnt.appendChild(el('span', '', '대원 ' + list.length + '명'));
+      cnt.appendChild(el('span', 'mp-count-sub', '이름·역할·맡은 채널로 찾기'));
+      body.appendChild(cnt);
+      if (!list.length) { body.appendChild(el('p', 'mp-empty', '조건에 맞는 대원이 없습니다.')); mapAppendFoot(body); return; }
+      const grid = el('div', 'mp-grid');
+      list.forEach(p => grid.appendChild(mapPersonCard(p)));
+      body.appendChild(grid);
+      mapAppendFoot(body);
+      if (st.focus) mapScrollTo('[data-pid="' + st.focus + '"]');
+      return;
+    }
+
+    if (st.tab === 'ban') {
+      const list = MAP_BANS.filter(b => !q || mapNorm(b.what + ' ' + b.owner + ' ' + (b.who || []).map(id => mapPersonOf(id).name).join(' ')).indexOf(q) >= 0);
+      const cnt = el('div', 'mp-count');
+      cnt.appendChild(el('span', '', '금지 ' + list.length + '건'));
+      cnt.appendChild(el('span', 'mp-count-sub', '헷갈리기 쉬운 것 — 담당만 한다'));
+      body.appendChild(cnt);
+      const grid = el('div', 'mp-ban-grid');
+      list.forEach((b, i) => {
+        const card = el('article', 'mp-ban');
+        const t = el('div', 'mp-ban-top');
+        t.appendChild(el('span', 'mp-ban-no', String(i + 1)));
+        t.appendChild(el('b', '', b.what));
+        card.appendChild(t);
+        const r1 = el('div', 'mp-row');
+        r1.appendChild(el('em', '', '금지'));
+        r1.appendChild(el('span', '', (b.who || []).map(id => mapPersonOf(id).name).join(' · ') || '—'));
+        card.appendChild(r1);
+        const r2 = el('div', 'mp-row');
+        r2.appendChild(el('em', '', '담당'));
+        r2.appendChild(el('span', '', b.owner));
+        card.appendChild(r2);
+        grid.appendChild(card);
+      });
+      body.appendChild(grid);
+      mapAppendFoot(body);
+      return;
+    }
+
+    const list = MAP_CHANNELS.filter(c => (st.group === 'all' || c.group === st.group) && (!q || mapHitChannel(c, q)));
+    const cnt = el('div', 'mp-count');
+    cnt.appendChild(el('span', '', '채널 ' + list.length + '곳'));
+    if (st.group !== 'all') cnt.appendChild(el('span', 'mp-count-sub', MAP_GROUP_LABEL[st.group]));
+    body.appendChild(cnt);
+    if (!list.length) { body.appendChild(el('p', 'mp-empty', '조건에 맞는 채널이 없습니다.')); mapAppendFoot(body); return; }
+    const grid = el('div', 'mp-grid');
+    list.forEach(c => grid.appendChild(mapChannelCard(c)));
+    body.appendChild(grid);
+    mapAppendFoot(body);
+  }
+
+  function mapAppendFoot(body) {
+    const note = el('p', 'mp-foot-note', '※ ' + MAP_BASIS.note);
+    body.appendChild(note);
+  }
+
+  function mapScrollTo(sel) {
+    const node = $(sel);
+    if (!node) return;
+    try { node.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { node.scrollIntoView(); }
+    node.classList.remove('mp-flash');
+    void node.offsetWidth;
+    node.classList.add('mp-flash');
+  }
+
+  function renderChanMap() {
+    const box = $('#chanmap');
+    if (!box) return;
+    box.hidden = false;
+    if (!box.querySelector('.mp-wrap')) mapRenderShell();
+    mapSyncShell();
+    mapRenderBody();
+    const lbl = $('#tabFilterLabel');
+    if (lbl) lbl.textContent = '채널 지도';
+    const sub = $('#chatSub');
+    if (sub) sub.textContent = MAP_BASIS.at + ' 기준 · 채널 ' + MAP_CHANNELS.length + '곳 · 대원 ' + MAP_PEOPLE.length + '명';
+  }
+
+  // 지도 안의 클릭은 #chanmap 하나에 위임한다(화면을 다시 그려도 연결이 살아 있게).
+  function bindMap() {
+    const box = $('#chanmap');
+    if (!box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    box.addEventListener('click', (ev) => {
+      const t = ev.target;
+      const tabBtn = t.closest ? t.closest('[data-maptab]') : null;
+      if (tabBtn) {
+        state.map.tab = tabBtn.dataset.maptab;
+        state.map.focus = '';
+        mapSyncShell();
+        mapRenderBody();
+        return;
+      }
+      const gBtn = t.closest ? t.closest('[data-mapgroup]') : null;
+      if (gBtn) {
+        state.map.group = gBtn.dataset.mapgroup;
+        mapSyncShell();
+        mapRenderBody();
+        return;
+      }
+      const perBtn = t.closest ? t.closest('[data-mapperson]') : null;
+      if (perBtn) {
+        state.map.tab = 'people';
+        state.map.q = '';
+        state.map.focus = perBtn.dataset.mapperson;
+        mapSyncShell();
+        mapRenderBody();
+        return;
+      }
+      const chBtn = t.closest ? t.closest('[data-mapchan]') : null;
+      if (chBtn) {
+        state.map.tab = 'chan';
+        state.map.group = 'all';
+        state.map.q = '';
+        state.map.focus = '';
+        mapSyncShell();
+        mapRenderBody();
+        mapScrollTo('[data-cno="' + chBtn.dataset.mapchan + '"]');
+      }
+    });
+    box.addEventListener('input', (ev) => {
+      if (ev.target && ev.target.id === 'mpSearch') {
+        state.map.q = ev.target.value;
+        state.map.focus = '';
+        mapRenderBody();
+      }
+    });
   }
 
   /* ═════════ 🔀 사단 워크플로우 ═════════
@@ -3246,6 +3867,8 @@
     if (box) box.hidden = state.view !== 'office';
     const wf = $('#workflow');
     if (wf) wf.hidden = state.view !== 'workflow';
+    const mp = $('#chanmap');
+    if (mp) mp.hidden = state.view !== 'chanmap';
   }
 
   /* ───────── 새로고침/폴링 ───────── */
@@ -3264,10 +3887,12 @@
       const added = msgs.filter(m => !beforeKeys.has(m.key));
       const isOffice = room.kind === 'office';
       const isWf = room.kind === 'workflow';
+      const isMap = room.kind === 'chanmap';
       const box = $('#messages');
       const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
       if (isOffice) renderOffice();
       else if (isWf) { if ($('#workflow .wf-wrap')) wfPaint(); else renderWorkflow(); }
+      else if (isMap) renderChanMap();
       else renderMessages();
       renderRooms();
       if (added.length && !opts.silent) {
@@ -3914,6 +4539,7 @@
 
   /* ───────── 이벤트 ───────── */
   function bind() {
+    bindMap();
     $('#btnBack').addEventListener('click', () => {
       state.view = 'rooms';
       $('#app').dataset.view = 'rooms';
@@ -4043,7 +4669,7 @@
   async function bootstrapData() {
     const box = $('#messages');
     const kind = roomById(state.roomId).kind;
-    const panelRoom = kind === 'office' || kind === 'workflow';
+    const panelRoom = kind === 'office' || kind === 'workflow' || kind === 'chanmap';
     if (!state.rooms[state.roomId] && !panelRoom) {
       box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     }
@@ -4063,6 +4689,7 @@
     }
     if (kind === 'office') renderOffice();
     else if (kind === 'workflow') renderWorkflow();
+    else if (kind === 'chanmap') renderChanMap();
     else renderMessages();
     renderRooms();
     renderChatHead();
@@ -4106,6 +4733,7 @@
     const startKind = roomById(state.roomId).kind;
     if (startKind === 'office') state.view = 'office';
     else if (startKind === 'workflow') state.view = 'workflow';
+    else if (startKind === 'chanmap') state.view = 'chanmap';
     // ?room=aichat 처럼 기본 전송 대상이 있는 방으로 바로 열렸을 때도 그 탭을 대상으로 잡는다.
     const startRoom = roomById(state.roomId);
     if (startRoom.target) saveTarget({ sheet: startRoom.target.sheet, tab: startRoom.target.tab });
@@ -4118,11 +4746,12 @@
     bind();
     bindInstall();
     applyMode();
-    if (state.view !== 'office' && state.view !== 'workflow' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
+    if (state.view !== 'office' && state.view !== 'workflow' && state.view !== 'chanmap' && window.matchMedia('(min-width: 900px)').matches) state.view = 'chat';
     $('#app').dataset.view = state.view;
     syncOfficeVisible();
     if (state.view === 'office') renderOffice();
     else if (state.view === 'workflow') renderWorkflow();
+    else if (state.view === 'chanmap') renderChanMap();
     bootstrapData();
     // 토큰이 없으면 빈 화면에 갇히므로 설정 창을 바로 열어 준다.
     if (window.SADAN_GAS_MODE && !state.config.token) {
