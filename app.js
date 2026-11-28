@@ -17,7 +17,9 @@
   };
 
   const B_TABS = ['시트1', 'Muse-B', '피클-B', '부이-B', 'Hark-B', '뀨-B', '키링-B', '경험은행'];
-  const A_MAIN_TABS = ['피클', '라운 채팅', '시트1'];
+  // A시트는 피클 군단 탭이 셋이다 — 2026-11-28 C피클 전용 탭·D피클 탭이 신설됐다.
+  const A_PICKLE_TABS = ['피클', 'C피클', 'D피클'];
+  const A_MAIN_TABS = A_PICKLE_TABS.concat(['라운 채팅', '시트1']);
   // A시트 ai채팅 탭은 [시간 | 작성자 | 내용 | 관련] 네 열짜리 채팅 로그다.
   const AI_CHAT_TAB = 'ai채팅';
 
@@ -53,16 +55,16 @@
       kind: 'office',
       sources: [
         { sheet: 'b', tabs: B_TABS },
-        { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
+        { sheet: 'a', tabs: A_PICKLE_TABS.concat(['라운 채팅', '시트1', AI_CHAT_TAB]) }
       ]
     },
     {
       id: 'workflow', name: '사단 워크플로우', emoji: '🔀', color: '#6366F1',
-      desc: '누가 · 어디에 · 무엇을 올렸는지 게시·출고 흐름',
+      desc: '24개 채널 게시·출고 흐름 · 피클 군단 4각 · 금지 흐름',
       kind: 'workflow',
       sources: [
         { sheet: 'b', tabs: B_TABS },
-        { sheet: 'a', tabs: ['피클', '라운 채팅', '시트1', AI_CHAT_TAB] }
+        { sheet: 'a', tabs: A_PICKLE_TABS.concat(['라운 채팅', '시트1', AI_CHAT_TAB]) }
       ]
     },
     {
@@ -77,7 +79,7 @@
   const NO_TAG = '태그 없음';
   const TAGS = {
     b: ['@전체', NO_TAG, '@Muse-B', '@피클-B', '@부이-B', '@Hark-B', '@뀨-B', '@키링-B'],
-    a: ['@전체', NO_TAG, '@Muse', '@Instinct', '@뀨', '@키링', '@D피클']
+    a: ['@전체', NO_TAG, '@Muse', '@Instinct', '@뀨', '@키링', '@C피클', '@D피클']
   };
   const titleForTag = (tag) => (tag === NO_TAG || !tag ? '[지시]' : `[지시] ${tag}`);
 
@@ -98,6 +100,7 @@
     'muse (사단장)': { emoji: '🎭', color: '#5B4BD6' },
     '피클': { emoji: '🥒', color: '#2E9E5B' },
     '피클-b': { emoji: '🥒', color: '#2E9E5B' },
+    'c피클': { emoji: '🥒', color: '#1E9E6A' },
     'd피클': { emoji: '🥒', color: '#22A06B' },
     '디피클': { emoji: '🥒', color: '#22A06B' },
     'muse-b': { emoji: '🎭', color: '#5B4BD6' },
@@ -938,6 +941,7 @@
     { id: 'a-muse', name: 'A-Muse', emoji: '🎭', role: 'A사단장', zone: 'a', side: 'a', lead: true, color: '#5B4BD6' },
     { id: 'b-muse', name: 'B-Muse', emoji: '🎭', role: 'B사단장', zone: 'b', side: 'b', lead: true, color: '#7C5CFF' },
     { id: 'a-pickle', name: '피클', emoji: '🥒', role: 'A사단 · 피클', zone: 'a', side: 'a', color: '#2E9E5B' },
+    { id: 'a-cpickle', name: 'C피클', emoji: '🥒', role: 'A사단 · C피클', zone: 'a', side: 'a', color: '#1E9E6A' },
     { id: 'a-booi', name: '부이', emoji: '🐣', role: 'A사단 · 부이', zone: 'a', side: 'a', color: '#E8A11B' },
     { id: 'a-instinct', name: 'Instinct', emoji: '⚡', role: 'A사단 · 인스팅트', zone: 'a', side: 'a', color: '#D9480F' },
     { id: 'a-pally', name: 'Pally', emoji: '🕊', role: 'A사단 · 팔리', zone: 'a', side: 'a', color: '#5F7E9E' },
@@ -957,6 +961,9 @@
     'muse': { a: 'a-muse', b: 'b-muse' },
     '피클': { a: 'a-pickle', b: 'b-pickle' },
     'pickle': { a: 'a-pickle', b: 'b-pickle' },
+    'c피클': { a: 'a-cpickle' },
+    '씨피클': { a: 'a-cpickle' },
+    'cpickle': { a: 'a-cpickle' },
     '부이': { a: 'a-booi', b: 'b-booi' },
     'booi': { a: 'a-booi', b: 'b-booi' },
     '뀨': { a: 'a-kkyu', b: 'b-kkyu' },
@@ -986,6 +993,7 @@
     'a-muse': { kind: 'cat', fur: '#A99BF2', label: '고양이' },
     'b-muse': { kind: 'cat', fur: '#8878E6', label: '고양이' },
     'a-pickle': { kind: 'otter', fur: '#8ACFA0', label: '수달' },
+    'a-cpickle': { kind: 'otter', fur: '#79C9AE', label: '수달' },
     'a-booi': { kind: 'chick', fur: '#FFD75C', label: '병아리' },
     'a-instinct': { kind: 'fox', fur: '#F4A05C', label: '여우' },
     'a-pally': { kind: 'bunny', fur: '#C6DDF7', label: '토끼' },
@@ -2633,46 +2641,219 @@
   /* ═════════ 🔀 사단 워크플로우 ═════════
      A·B사단 시트 기록에서 "누가(봇) · 어디로(게시 흐름) · 어디에(채널)"를 뽑아
      캔버스에 그리고, 노드를 고르면 오른쪽 '속성 · 게시 내역' 패널에 그 내역을 펼친다.
-     한 행에 여러 플랫폼 링크가 있으면 그 채널들로 모두 나눠 잇는다. */
+     한 행에 여러 플랫폼 링크가 있으면 그 채널들로 모두 나눠 잇는다.
+     2026-11-28 20:30 「사단 채널별 담당 지도」 기준 — 채널 24곳(에셋 플랫폼은 7곳으로 나눔)
+     · 담당자·계정·현황·금지가 채널마다 붙어 있고, 피클 군단 4각과 금지 흐름을 함께 보여 준다. */
   const WF_HUBS = [
-    { id: 'blog', name: '블로그·카페·SNS', short: '블로그·SNS', emoji: '📝', color: '#3B82F6' },
-    { id: 'asset', name: '디지털 에셋·굿즈', short: '에셋·굿즈', emoji: '🛒', color: '#8B5CF6' },
-    { id: 'store', name: '스토어·제휴', short: '스토어·제휴', emoji: '🛍️', color: '#10B981' },
-    { id: 'campaign', name: '체험단·공모전', short: '체험단·공모전', emoji: '🎯', color: '#F59E0B' }
+    { id: 'blog', name: '블로그·카페', emoji: '📝', color: '#3B82F6' },
+    { id: 'sns', name: 'SNS·숏폼', emoji: '📱', color: '#E1306C' },
+    { id: 'asset', name: '디지털 에셋·굿즈', emoji: '🛒', color: '#8B5CF6' },
+    { id: 'store', name: '스토어·제휴', emoji: '🛍️', color: '#10B981' },
+    { id: 'campaign', name: '체험단·공모전', emoji: '🎯', color: '#F59E0B' },
+    { id: 'ops', name: '제작·운영', emoji: '🗂️', color: '#64748B' }
   ];
+  // Studio Forme 브랜드 토큰 — 같은 플랫폼(인스타·핀터·유튜브·Medium)을 실속템과 가를 때 쓴다.
+  const WF_SF = ['스튜디오 포르메', '스튜디오포르메', 'studio forme', 'studioforme', 'studioformekr'];
   const WF_CHANNELS = [
-    { id: 'naver', name: '네이버 블로그', emoji: '🟢', hub: 'blog', color: '#03C75A',
-      hosts: ['blog.naver.com'], keys: ['네이버 블로그', '네이버블로그', 'blog.naver', '실속템', '투데이리빙'] },
-    { id: 'tistory', name: '티스토리', emoji: '📔', hub: 'blog', color: '#F16541',
-      hosts: ['tistory.com'], keys: ['티스토리', 'tistory', 'everythingtopic'] },
-    { id: 'daangn', name: '당근 카페', emoji: '🥕', hub: 'blog', color: '#FF6F0F',
-      hosts: ['cafe.daangn.com', 'daangn.com'], keys: ['당근 카페', '당근카페', '당근'] },
-    { id: 'pinterest', name: '핀터레스트', emoji: '📌', hub: 'blog', color: '#E60023',
-      hosts: ['pinterest.'], keys: ['핀터레스트', '핀터', 'pinterest'] },
-    { id: 'instagram', name: '인스타그램', emoji: '📸', hub: 'blog', color: '#E1306C',
-      hosts: ['instagram.com', 'instagr.am'], keys: ['인스타그램', '인스타', '릴스'] },
-    { id: 'youtube', name: '유튜브·숏폼', emoji: '🎬', hub: 'blog', color: '#FF0033',
-      hosts: ['youtube.com', 'youtu.be'], keys: ['유튜브', 'youtube', '숏폼', '쇼츠'] },
-    { id: 'gumroad', name: 'Gumroad', emoji: '🛍', hub: 'asset', color: '#FF90E8',
-      hosts: ['gumroad.com'], keys: ['gumroad', '검로드'] },
-    { id: 'kofi', name: 'Ko-fi', emoji: '☕', hub: 'asset', color: '#FF5E5B',
-      hosts: ['ko-fi.com'], keys: ['ko-fi', 'kofi'] },
-    { id: 'payhip', name: 'Payhip', emoji: '💳', hub: 'asset', color: '#22A06B',
-      hosts: ['payhip.com'], keys: ['payhip', '페이힙'] },
-    { id: 'itchio', name: 'itch.io', emoji: '🎮', hub: 'asset', color: '#FA5C5C',
-      hosts: ['itch.io'], keys: ['itch.io', 'itchio'] },
-    { id: 'marpple', name: '마플샵', emoji: '👕', hub: 'asset', color: '#5B4BD6',
-      hosts: ['marpple.com', 'marpple.shop'], keys: ['마플샵', '마플', 'marpple'] },
-    { id: 'tooldi', name: '툴디', emoji: '🧰', hub: 'asset', color: '#0EA5E9',
-      hosts: ['tooldi.co.kr', 'tooldi.com'], keys: ['툴디', 'tooldi'] },
-    { id: 'littly', name: '리틀리', emoji: '🔗', hub: 'store', color: '#3B82F6',
-      hosts: ['litt.ly'], keys: ['리틀리', 'litt.ly', 'littly'] },
-    { id: 'smartstore', name: '스마트스토어', emoji: '🏬', hub: 'store', color: '#12B76A',
-      hosts: ['smartstore.naver.com'], keys: ['스마트스토어', '스피드고', 'smartstore'] },
-    { id: 'review', name: '체험단 플랫폼', emoji: '🎯', hub: 'campaign', color: '#F59E0B',
+    /* ── 블로그·카페 ── */
+    { id: 'naver_sil', no: 1, name: '실속템 네이버 블로그', emoji: '🟢', hub: 'blog', color: '#03C75A',
+      hosts: ['blog.naver.com/silsoktem'], keys: ['실속템 네이버', '실속템 블로그', 'silsoktem 블로그'],
+      loose: ['네이버 블로그', '네이버블로그', 'blog.naver'], fam: 'naverblog',
+      owner: 'A-피클 · B피클', account: 'silsoktem',
+      status: '7호 발행(11-28 11:12) · 8호 스마트플러그 준비',
+      forbid: '발행은 A-피클·B피클만 — 대원은 초안·자료까지만' },
+    { id: 'naver_tarot', no: 4, name: '타로 네이버 블로그', emoji: '🔮', hub: 'blog', color: '#059669',
+      hosts: ['blog.naver.com/rauntarot'], keys: ['타로 블로그', '타로 네이버', 'rauntarot'],
+      loose: [], fam: 'naverblog',
+      owner: 'A-피클 (체험단 후기)', account: 'rauntarot (leh556)',
+      status: '체험단 후기 전용 · 타로 유입 99%는 인스타 DM',
+      forbid: '체험단 글은 타로 블로그 체험단 카테고리로만' },
+    { id: 'tistory_health', no: 2, name: '건강 티스토리', emoji: '📔', hub: 'blog', color: '#F16541',
+      hosts: ['everythingtopic.tistory.com'], keys: ['건강 티스토리', 'everythingtopic'],
+      loose: ['티스토리', 'tistory'], fam: 'tistory',
+      owner: 'C피클 (매일 1편)', account: 'everythingtopic',
+      status: '80호까지 발행 · 서치어드바이저 소유확인 완료',
+      forbid: 'A-피클 티스토리 루틴은 일시정지 · 타로 티스토리는 건드리지 않음' },
+    { id: 'tistory_tarot', no: 3, name: '타로 티스토리 — 건들지 마', emoji: '⛔', hub: 'blog', color: '#B42318',
+      hosts: ['hoohra.tistory.com'], keys: ['타로 티스토리', 'hoohra'],
+      loose: [], fam: 'tistory', ban: true,
+      owner: '아무도 안 건드림', account: 'hoohra',
+      status: '한도·상태: 건들지 마 (#89) · 애드센스 승인됨',
+      forbid: '라운 명시 지시가 있을 때만 그 건에 한해 (#89)' },
+    { id: 'wordpress', no: 5, name: '워드프레스', emoji: '🌐', hub: 'blog', color: '#21759B',
+      hosts: ['lifetopic.ct.ws'], keys: ['워드프레스', 'lifetopic'], loose: [],
+      owner: 'Muse 직접 입력 · 뀨(15호~)', account: 'lifetopic_admin',
+      status: '12·13·14호 예약(11-30~12-02) · 애드센스 신청 12-05~08',
+      forbid: '' },
+    { id: 'blogger', no: 6, name: '구글 블로그', emoji: '📝', hub: 'blog', color: '#EA4335',
+      hosts: ['blogspot.com', 'blogger.com'], keys: ['구글 블로그', '블로거', 'blogspot'], loose: [],
+      owner: '뀨 (Muse 대행 가능)', account: '[미확인] — 라운 확인 필요',
+      status: '공개 13편 · 애드센스 신청 12-04~07 목표', forbid: '' },
+    { id: 'daangn', no: 7, name: '당근 카페', emoji: '🥕', hub: 'blog', color: '#FF6F0F',
+      hosts: ['cafe.daangn.com', 'daangn.com'], keys: ['당근 카페', '당근카페', '당근'], loose: [],
+      owner: 'A-피클', account: '닉네임 알뜰부산러',
+      status: '매일 09:23 · 19:27 두 번',
+      forbid: '자동화·다계정·봇 절대 금지 (약관 제17조②) · 부캐 중복 금지' },
+
+    /* ── SNS·숏폼 ── */
+    { id: 'ig_sil', no: 8, name: '실속템 인스타그램', emoji: '📸', hub: 'sns', color: '#E1306C',
+      hosts: ['instagram.com'], keys: ['실속템 인스타', '실속템 릴스', '실속템 카드뉴스', 'silsoktem 인스타'],
+      loose: ['인스타그램', '인스타', '릴스', '카드뉴스'], fam: 'ig',
+      owner: 'A-피클 (제작 Muse)', account: '@silsoktem',
+      status: '7호 게시(11-28 13:36) · 카드뉴스 7장',
+      forbid: 'Pally 이미지 절대 금지 (#98) · B피클은 올리지 않음' },
+    { id: 'ig_sf', no: 12, name: 'Studio Forme 인스타그램', emoji: '📸', hub: 'sns', color: '#C13584',
+      hosts: ['instagram.com'], need: [WF_SF, ['인스타', '릴스']], fam: 'ig',
+      owner: 'B뮤즈', account: '@studioformekr',
+      status: '홍보 릴스 11-27 19:57 게시',
+      forbid: 'A-피클 금지 — A-피클은 실속템 인스타만' },
+    { id: 'tiktok_sil', no: 9, name: '실속템 틱톡', emoji: '🎵', hub: 'sns', color: '#111827',
+      hosts: ['tiktok.com'], keys: ['틱톡', 'tiktok'], loose: [],
+      owner: 'A-피클 (제작 Muse)', account: '@silsoktem',
+      status: '2호 v3 게시(11-28 08:22) · 3호 v6 미발행',
+      forbid: '게시 방식 혼재 — MP4+캡션 전달 후 라운 폰 게시인지 건별 확인' },
+    { id: 'yt_sil', no: 10, name: '실속템 유튜브 쇼츠', emoji: '🎬', hub: 'sns', color: '#FF0033',
+      hosts: ['youtube.com', 'youtu.be'], keys: ['실속템 쇼츠', '실속템 유튜브', 'silsoktem_kr'],
+      loose: ['유튜브', '쇼츠', 'youtube'], fam: 'yt',
+      owner: 'A-피클 (제작 Muse)', account: '@silsoktem_kr',
+      status: '1·2호 게시 · 3호 v6 미발행',
+      forbid: '네이버 클립 안 함 (#96) — 쇼츠·틱톡·인스타 3곳만' },
+    { id: 'yt_sf', no: 15, name: 'Studio Forme 유튜브 쇼츠', emoji: '🎬', hub: 'sns', color: '#B42318',
+      hosts: ['youtube.com', 'youtu.be'], need: [WF_SF, ['유튜브', '쇼츠', 'youtube']], fam: 'yt',
+      owner: 'B뮤즈', account: '@studioformekr',
+      status: 'v4 홍보 영상 11-28 00:09 게시', forbid: '' },
+    { id: 'pin_sil', no: 11, name: '실속템 핀터레스트 (룸앤무드)', emoji: '📌', hub: 'sns', color: '#E60023',
+      hosts: ['pinterest.com/shortpong6990', 'pinterest.co.kr/shortpong6990'],
+      keys: ['룸앤무드', 'shortpong6990', '실속템 핀'], loose: ['핀터레스트', '핀터', 'pinterest'], fam: 'pin',
+      owner: 'C피클 (총괄 Muse)', account: '@shortpong6990',
+      status: '총 15핀 · 13호 11-28 08:45 · 14호 11-29 예정',
+      forbid: 'A-피클 루틴 일시정지 · 쿠팡↔쇼핑커넥트 1:1 교대' },
+    { id: 'pin_sf', no: 13, name: 'Studio Forme 핀터레스트', emoji: '📌', hub: 'sns', color: '#AD081B',
+      hosts: ['pinterest.com/studioformekr'], need: [WF_SF, ['핀터', 'pinterest']], fam: 'pin',
+      owner: 'B뮤즈', account: 'studioformekr@gmail.com',
+      status: 'pin-01 두들 · pin-02 워터컬러 게시 · pin-04 픽셀 준비',
+      forbid: 'A-피클·C피클 금지 · 화풍 제한(pin-03·07 보류)' },
+    { id: 'medium_sf', no: 14, name: 'Studio Forme Medium', emoji: '✍️', hub: 'sns', color: '#111827',
+      hosts: ['medium.com'], need: [WF_SF, ['medium', '미디엄']], fam: 'medium',
+      owner: 'A-피클 발행 (초안 B뮤즈)', account: '@studioformekr',
+      status: '1호 게시 · 2호 워터컬러 초안 완료(발행 대기)',
+      forbid: 'C피클은 Medium 게시 불가(미연동)' },
+
+    /* ── 디지털 에셋·굿즈 ── */
+    { id: 'gumroad', no: 16, name: 'Gumroad', emoji: '🛍', hub: 'asset', color: '#FF90E8',
+      hosts: ['gumroad.com'], keys: ['gumroad', '검로드'], loose: [],
+      owner: 'B피클 (계정 A-피클)', account: 'shortpong6990',
+      status: '2호 $7.99 · 3·4호 $9.99 · 메가 $24.99',
+      forbid: '가격 변경은 라운 명시 승인 없이 금지 — 메가 픽셀 $14.99는 11-29 비번 정리 후 (#99)' },
+    { id: 'kofi', no: 16, name: 'Ko-fi', emoji: '☕', hub: 'asset', color: '#FF5E5B',
+      hosts: ['ko-fi.com'], keys: ['ko-fi', 'kofi'], loose: [],
+      owner: 'B피클', account: 'shortpong6990', status: '스토어 운영 중', forbid: '' },
+    { id: 'marpple', no: 16, name: '마플샵', emoji: '👕', hub: 'asset', color: '#5B4BD6',
+      hosts: ['marpple.com', 'marpple.shop'], keys: ['마플샵', '마플', 'marpple'], loose: [],
+      owner: 'B피클', account: 'Studio Forme', status: '굿즈 등록·판매 중', forbid: '' },
+    { id: 'tooldi', no: 16, name: '툴디', emoji: '🧰', hub: 'asset', color: '#0EA5E9',
+      hosts: ['tooldi.co.kr', 'tooldi.com'], keys: ['툴디', 'tooldi'], loose: [],
+      owner: 'B피클', account: 'shortpong6990',
+      status: '심사 30/30 상한 · 3호 크리스마스 클레이 20종 대기', forbid: '' },
+    { id: 'itchio', no: 16, name: 'itch.io', emoji: '🎮', hub: 'asset', color: '#FA5C5C',
+      hosts: ['itch.io'], keys: ['itch.io', 'itchio'], loose: [],
+      owner: 'A-피클 (계정 관리)', account: 'shortpong6990',
+      status: '메가 번들 3종 공개(두들·아이소·워터컬러 각 $24.99)', forbid: '' },
+    { id: 'payhip', no: 16, name: 'Payhip', emoji: '💳', hub: 'asset', color: '#22A06B',
+      hosts: ['payhip.com'], keys: ['payhip', '페이힙'], loose: [],
+      owner: 'A-피클 (계정 관리)', account: 'shortpong6990', status: '운영 중', forbid: '' },
+    { id: 'booth', no: 16, name: 'BOOTH', emoji: '🏪', hub: 'asset', color: '#FC4A6C',
+      hosts: ['booth.pm'], keys: ['booth', '부스'], loose: [],
+      owner: 'B피클', account: 'Studio Forme',
+      status: '보류 유지 — 웹 세션 로그인 미연결', forbid: '' },
+    { id: 'ctee', no: 17, name: 'CTEE (크티)', emoji: '🧡', hub: 'asset', color: '#F97316',
+      hosts: ['ctee.kr'], keys: ['ctee', '크티'], loose: [],
+      owner: 'B피클 (11-29~ 전담)', account: 'shortpong6990',
+      status: '1차 2종 발행(번들 5,900원·샘플팩 0원) · 프롬프트팩 9,900원 확정 대기',
+      forbid: '정산 계좌·연락처 인증 미등록 — 라운 직접 필요(현재 정산 불가) · C피클 게시 불가' },
+    { id: 'ogq', no: 18, name: 'OGQ 스티커·스톡·음원', emoji: '🎨', hub: 'asset', color: '#7C3AED',
+      hosts: ['creators.ogq.me', 'ogq.me'], keys: ['ogq', '스티커', '컬러링'], loose: [],
+      owner: 'Muse 전담', account: 'silsoktem@naver.com (StudioForme)',
+      status: '전체 144 = 판매중 15 + 심사중 129 · SET11 슬롯은 라운 일요일',
+      forbid: '피클 완전 제외 (#93) · Pally 이미지 절대 금지 (#98)' },
+
+    /* ── 스토어·제휴 ── */
+    { id: 'smartstore', no: 19, name: '스마트스토어 호오라', emoji: '🏬', hub: 'store', color: '#12B76A',
+      hosts: ['smartstore.naver.com'], keys: ['스마트스토어', '스피드고', '호오라', '도매매'], loose: [],
+      owner: 'A-피클 (기획·검수 Muse)', account: 'leh556 (호오라)',
+      status: '10종 출고·라이브 확인(11-28) · 위탁판매',
+      forbid: '건당 순마진 5,000~8,000원 이상만 (고마진 원칙)' },
+    { id: 'littly', no: 23, name: '리틀리', emoji: '🔗', hub: 'store', color: '#3B82F6',
+      hosts: ['litt.ly'], keys: ['리틀리', 'litt.ly', 'littly'], loose: [],
+      owner: 'B피클', account: 'litt.ly/silsoktem',
+      status: '7호 리틀리 발행 완료', forbid: '' },
+
+    /* ── 체험단·공모전 ── */
+    { id: 'review', no: 22, name: '체험단 플랫폼', emoji: '🎁', hub: 'campaign', color: '#F59E0B',
       hosts: ['reviewnote.co.kr', 'revu.co.kr', 'reviews.kr', 'reviewplace.co.kr', '11st.co.kr', '29cm.co.kr'],
-      keys: ['레뷰', '리뷰노트', '리뷰플레이스', '체험단', '29cm', '11번가'] }
+      keys: ['레뷰', '리뷰노트', '리뷰플레이스', '체험단'], loose: [],
+      owner: '신청 A-피클·Hark·Muse (#95)', account: '개인정보 마스킹',
+      status: '오늘 14건 신청 · 다음 발표 11-30',
+      forbid: '선결제·별도 영상 필수·공부·학습·안경류 제외 · 방문형은 부산 서면~하단만' },
+    { id: 'contest', no: 21, name: '공모전·설문 제출', emoji: '🎯', hub: 'campaign', color: '#D97706',
+      hosts: ['wevity.com', 'contestkorea.com', 'allforyoung.com', 'thinkcontest.com'],
+      keys: ['공모전', '설문', '응모', '출품'], loose: [],
+      owner: 'Muse만 제출 (#48)', account: '— (라운이 버튼)',
+      status: '마감 11-30~12-20 7건 · 제출은 라운이 직접 버튼 (#28)',
+      forbid: '대원 전원 찾기·검수까지만 · 클라우드 브라우저 제출 금지' },
+
+    /* ── 제작·운영 ── */
+    { id: 'video', no: 20, name: '영상 제작 (숏폼·릴스)', emoji: '🎞️', hub: 'ops', color: '#6366F1',
+      hosts: [], keys: ['ffmpeg', 'qwen', 'tts', '영상 조립', '렌더'], loose: [],
+      owner: 'Muse 조립 · Hark 콘티·훅', account: '—',
+      status: '3호 v6 완성(61.87초) · 렌더 검수 3종 필수',
+      forbid: 'Pally 이미지 금지 (#98) · Edge TTS·ElevenLabs 무료는 상업·공모전 금지' },
+    { id: 'ops', no: 24, name: '관제판·시트·노션', emoji: '🗂️', hub: 'ops', color: '#475569',
+      hosts: ['sadan-dashboard.pages.dev', 'docs.google.com/spreadsheets', 'notion.so', 'notion.site'],
+      keys: ['관제판', '시트 적재', '노션', 'tasks db', '대시보드', '깃허브 정리'], loose: [],
+      owner: 'C피클 관제판 · A-피클 노션 · D피클 대시보드', account: 'A시트 · 노션 Tasks DB',
+      status: '136탭 · 3시간 동기화 · D피클 탭 신설',
+      forbid: '시트 적재 = 노션 동시 적재 (따로 하지 않음 · 예외 없음)' }
   ];
+
+  /* 피클 군단 4각 — A/B/C/D피클의 담당과 하면 안 되는 일 */
+  const WF_CORPS = [
+    { id: 'a-pickle', tag: 'A', name: 'A-피클', sub: '피클 군단장 · @raun_tarot 경유',
+      does: '한국 현장 실행·발행 전담 — 실속템 블로그·당근 카페·스마트스토어·실속템 인스타/틱톡/쇼츠 업로드·체험단 신청·Medium 발행',
+      tab: 'A시트 피클 탭 → 노션 Tasks DB',
+      cannot: 'OGQ(#93) · 타로 티스토리(#89) · Studio Forme 인스타(담당 B뮤즈)' },
+    { id: 'b-pickle', tag: 'B', name: 'B피클', sub: '@laun8 · B사단 소속 겸임',
+      does: 'Studio Forme 4곳(Gumroad·Ko-fi·마플샵·툴디) + CTEE 전담 + 실속템 7호 블로그·인스타·리틀리',
+      tab: 'B시트 피클-B 탭 → 노션 Tasks DB',
+      cannot: '실속템 인스타는 A-피클 담당 · Studio Forme 인스타는 B뮤즈 · OGQ(#93)' },
+    { id: 'a-cpickle', tag: 'C', name: 'C피클', sub: '@laun21 · A-피클 서포트',
+      does: '건강 티스토리 매일 1편 · 핀터 룸앤무드 1핀/일 · Studio Forme 에셋 가공·분할 · Python 팩트 그래프 · 사단 관제판 3시간 동기화',
+      tab: 'A시트 C피클 탭(신설) → 노션 [C피클 서포트]',
+      cannot: '인스타·OGQ·CTEE·Medium 미연동 · 타로 티스토리(#89)' },
+    { id: 'a-dpickle', tag: 'D', name: 'D피클', sub: '온보딩 중 · leh556@gmail.com · GitHub @leh556-dot',
+      does: 'A사단 소속, A-피클 서포트 예정 — 대시보드·깃허브 정리, 메일·일정·공모전 추적',
+      tab: 'A시트 D피클 탭(신설) → 노션 [D피클 서포트]',
+      cannot: 'C피클 영역(핀터·티스토리·에셋 가공·관제판) 침범 금지 · 노션은 아직 미연결' }
+  ];
+
+  /* 누구에게 시키면 안 되는 일 — 헷갈리기 쉬운 금지 흐름 */
+  const WF_BANS = [
+    { what: '이미지 제작 (카드뉴스·썸네일·합성·편집)', who: ['a-pally'], owner: 'Muse (#98)' },
+    { what: 'OGQ 제출', who: ['a-pickle', 'a-cpickle', 'a-dpickle', 'b-pickle'], owner: 'Muse (#93)' },
+    { what: '공모전·설문 제출', who: ['a-pally', 'a-instinct', 'a-booi', 'b-booi', 'b-keyring', 'b-hark'], owner: 'Muse만 (#48)' },
+    { what: '실속템 인스타그램 올리기', who: ['b-pickle'], owner: 'A-피클' },
+    { what: 'Studio Forme 인스타그램 올리기', who: ['a-pickle'], owner: 'B뮤즈' },
+    { what: '룸앤무드 핀터레스트', who: ['a-pickle'], owner: 'C피클 + Muse 총괄' },
+    { what: 'Studio Forme 핀터레스트', who: ['a-pickle', 'a-cpickle'], owner: 'B뮤즈' },
+    { what: '타로 티스토리 (hoohra)', who: ['a-muse', 'a-pickle', 'a-cpickle', 'a-dpickle', 'b-pickle', 'b-muse'], owner: '아무도 안 건드림 (#89)' },
+    { what: '네이버 클립', who: ['a-muse', 'a-pickle', 'a-cpickle', 'b-pickle'], owner: '안 함 (#96)' },
+    { what: 'Gumroad 가격 변경', who: ['a-muse', 'a-pickle', 'b-pickle', 'a-cpickle', 'b-muse'], owner: '라운 승인 후' },
+    { what: 'Adobe Stock 업로드', who: ['a-pickle', 'b-pickle', 'a-cpickle', 'a-dpickle', 'b-muse'], owner: '라운 직접' },
+    { what: '당근 자동화·다계정·봇', who: ['a-muse', 'a-pickle', 'b-pickle', 'a-cpickle', 'a-dpickle'], owner: '수동만 (약관 제17조②)' }
+  ];
+
+  /* 기록이 흐르는 길 — 시트 적재와 노션이 따로 가지 않는다 */
+  const WF_RECORD_FLOW = '대원·피클이 일을 마치면 → 본인 탭 적재(`피클`·`C피클`·`D피클`·`Muse`·B사단 탭) → 같은 순간 노션 Tasks DB 적재 → 시트1 관제판에 보고(C피클이 3시간 동기화) → 매일 밤 22:00 하루치 숫자 보고';
   const WF_HUB_BY_ID = {};
   WF_HUBS.forEach(h => { WF_HUB_BY_ID[h.id] = h; });
   const WF_CHAN_BY_ID = {};
@@ -2709,26 +2890,45 @@
   }
 
   // 제목·본문에서 '올린 곳'을 모두 찾는다.
-  //  · 링크 주소는 어느 플랫폼인지 가장 확실하다(제목 + 본문).
-  //  · 링크가 없는 행은 제목에 적힌 이름으로 찾는다(본문까지 훑으면 다른 플랫폼 이름이 섞인다).
+  //  · 링크 주소는 어느 플랫폼인지 가장 확실하다(제목 + 본문). 같은 도메인이 두 브랜드면
+  //    제목의 브랜드 토큰으로 가른다(인스타·핀터·유튜브·Medium의 실속템 ↔ Studio Forme).
+  //  · 이름은 제목에서만 찾는다. 본문에는 다른 플랫폼 이름이 섞여 있다.
+  //  · '네이버 블로그'·'티스토리' 같은 일반 이름은 그 계열이 아직 없을 때만 쓴다.
   function wfChannelsOf(title, body) {
     const t = String(title || '');
     const low = t.toLowerCase();
+    const both = (t + '\n' + String(body || '')).toLowerCase();
     const out = [];
     const seen = new Set();
+    const fams = new Set();
     const add = (c, url) => {
       if (!c || seen.has(c.id)) return;
       seen.add(c.id);
+      if (c.fam) fams.add(c.fam);
       out.push({ ch: c, url: url || '' });
     };
+    const hitNeed = (c, s) => !!c.need && c.need.every(g => g.some(k => s.indexOf(String(k).toLowerCase()) >= 0));
+    const hitKeys = (c, s) => !!(c.keys || []).some(k => s.indexOf(String(k).toLowerCase()) >= 0);
+
     wfUrls(t + '\n' + String(body || '')).forEach(u => {
       const ul = u.toLowerCase();
-      const c = WF_CHANNELS.find(x => x.hosts.some(h => ul.indexOf(h) >= 0));
-      if (c) add(c, u);
+      const cands = WF_CHANNELS.filter(c => (c.hosts || []).some(h => ul.indexOf(h) >= 0));
+      if (!cands.length) return;
+      const pick = cands.length === 1 ? cands[0]
+        : (cands.find(c => hitNeed(c, both)) || cands.find(c => hitKeys(c, low)) || cands[0]);
+      add(pick, u);
     });
+
     WF_CHANNELS.forEach(c => {
       if (seen.has(c.id)) return;
-      if (c.keys.some(k => low.indexOf(String(k).toLowerCase()) >= 0)) add(c, '');
+      if (c.need) { if (hitNeed(c, low)) add(c); return; }
+      if (hitKeys(c, low)) add(c);
+    });
+
+    WF_CHANNELS.forEach(c => {
+      if (seen.has(c.id) || !c.loose || !c.loose.length) return;
+      if (c.fam && fams.has(c.fam)) return;
+      if (c.loose.some(k => low.indexOf(String(k).toLowerCase()) >= 0)) add(c);
     });
     return out;
   }
@@ -2821,6 +3021,8 @@
     const bots = [];
     const botById = new Map();
     const mkBot = meta => {
+      const dup = botById.get(meta.id);
+      if (dup) return dup;
       const b = {
         id: meta.id, name: meta.name, emoji: meta.emoji, color: meta.color, zone: meta.zone,
         lead: !!meta.lead, count: 0, last: 0, chans: new Map()
@@ -2832,7 +3034,7 @@
     const chans = [];
     const chanById = new Map();
     WF_CHANNELS.forEach(c => {
-      const o = { id: c.id, name: c.name, emoji: c.emoji, hub: c.hub, color: c.color, count: 0, last: 0, bots: new Map() };
+      const o = { id: c.id, name: c.name, emoji: c.emoji, hub: c.hub, color: c.color, ban: !!c.ban, count: 0, last: 0, bots: new Map() };
       chans.push(o); chanById.set(o.id, o);
     });
     const hubs = [];
@@ -2917,18 +3119,29 @@
     const botsBottom = Math.max(ya, yb);
 
     let cy = G.top;
+    let chanW = xCh + G.chanW;
     model.hubs.forEach(h => {
       const mine = model.chans.filter(c => c.hub === h.id);
+      // 채널이 네 곳을 넘으면 두 열로 나눠 세로 길이를 절반으로 줄인다.
+      const cols = mine.length >= 4 ? 2 : 1;
+      const per = Math.ceil(mine.length / cols);
       const start = cy;
-      mine.forEach(c => { push('chan', c.id, xCh, cy, G.chanW, G.chanH); cy += G.chanH + G.chanGap; });
-      const end = cy - G.chanGap;
+      mine.forEach((c, i) => {
+        const j = Math.floor(i / per);
+        const row = i % per;
+        push('chan', c.id, xCh + j * (G.chanW + G.chanGap + 6), cy + row * (G.chanH + G.chanGap), G.chanW, G.chanH);
+      });
+      const rows = per;
+      const end = cy + rows * (G.chanH + G.chanGap) - G.chanGap;
+      const span = cols * G.chanW + (cols - 1) * (G.chanGap + 6);
       push('hub', h.id, xHub, Math.round((start + end) / 2 - G.hubH / 2), G.hubW, G.hubH);
+      if (xCh + span > chanW) chanW = xCh + span;
       cy = end + G.hubSep;
     });
     const chansBottom = cy - G.hubSep;
 
     return {
-      w: xCh + G.chanW + G.padX,
+      w: chanW + G.padX,
       h: Math.round(Math.max(botsBottom, chansBottom) + G.padY),
       nodes, groups,
       cols: [
@@ -3107,7 +3320,7 @@
   /* ── 노드 · 선 ── */
   function wfNodeEl(kind, item, box) {
     const sel = state.wf.sel === kind + ':' + item.id;
-    const b = el('button', 'wf-node wf-n-' + kind + (item.count ? '' : ' wf-zero') + (sel ? ' sel' : ''));
+    const b = el('button', 'wf-node wf-n-' + kind + (item.count ? '' : ' wf-zero') + (sel ? ' sel' : '') + (kind === 'chan' && item.ban ? ' wf-ban' : ''));
     b.type = 'button';
     b.dataset.kind = kind;
     b.dataset.id = item.id;
@@ -3119,7 +3332,10 @@
     // 색은 CSS 변수로 넘긴다(테마별로 진하기만 바꾸면 되도록).
     b.style.setProperty('--wf-accent', accent);
     b.style.setProperty('--wf-accent-soft', mixHex(accent, '#FFFFFF', 0.86));
-    b.title = item.name + ' · ' + item.count + '건';
+    b.title = (kind === 'chan' && WF_CHAN_BY_ID[item.id])
+      ? item.name + ' · 담당 ' + (WF_CHAN_BY_ID[item.id].owner || '—') + ' · ' + item.count + '건'
+        + (WF_CHAN_BY_ID[item.id].forbid ? ' · 금지: ' + WF_CHAN_BY_ID[item.id].forbid : '')
+      : item.name + ' · ' + item.count + '건';
     b.setAttribute('aria-pressed', sel ? 'true' : 'false');
     b.setAttribute('aria-label', WF_KIND_LABEL[kind] + ' ' + item.name + ' ' + item.count + '건');
 
@@ -3142,7 +3358,12 @@
 
     let sub = '';
     if (kind === 'bot') sub = (item.lead ? '사단장' : (item.zone === 'a' ? 'A사단' : item.zone === 'b' ? 'B사단' : '새로 합류'));
-    else if (kind === 'chan') sub = item.last ? officeAgo(item.last) : '기록 없음';
+    else if (kind === 'chan') {
+      const ch = WF_CHAN_BY_ID[item.id] || {};
+      if (ch.ban) sub = '⛔ 건들지 마 (#89)';
+      else if (item.last) sub = (ch.owner ? ch.owner.split(' (')[0] + ' · ' : '') + officeAgo(item.last);
+      else sub = ch.owner || '기록 없음';
+    }
     else sub = '봇 ' + item.bots.size + ' · 채널 ' + item.chans.size;
     meta.appendChild(el('i', 'wf-sub', sub));
     b.appendChild(meta);
@@ -3284,6 +3505,45 @@
     if (!own.length) box.appendChild(el('p', 'wf-p-empty', '기록이 없습니다.'));
   }
 
+  // 담당 지도 카드 — 채널 하나의 담당·계정·현황·금지
+  function wfChanMapCard(box, ch) {
+    if (!ch) return;
+    const card = el('div', 'wf-p-map' + (ch.ban ? ' wf-map-ban' : ''));
+    const row = (k, v, cls) => {
+      if (!v) return;
+      const r = el('div', 'wf-map-row' + (cls ? ' ' + cls : ''));
+      r.appendChild(el('i', '', k));
+      r.appendChild(el('b', '', v));
+      card.appendChild(r);
+    };
+    row('담당', ch.owner);
+    row('계정', ch.account);
+    row('현황', ch.status);
+    row(ch.ban ? '금지' : '주의', ch.forbid, ch.ban ? 'bad' : '');
+    box.appendChild(card);
+  }
+
+  // 피클 군단 카드 — 4각 중 하나의 담당·적재·금지
+  function wfCorpsCard(box, c, compact) {
+    const card = el('button', 'wf-corps-card' + (compact ? ' compact' : ''));
+    card.type = 'button';
+    card.addEventListener('click', () => wfSelect('bot', c.id));
+    const head = el('div', 'wf-corps-head');
+    head.appendChild(el('span', 'wf-corps-tag', c.tag));
+    const tit = el('span', 'wf-corps-tit');
+    tit.appendChild(el('b', '', '🥒 ' + c.name));
+    tit.appendChild(el('i', '', c.sub));
+    head.appendChild(tit);
+    card.appendChild(head);
+    if (!compact) {
+      card.appendChild(el('p', 'wf-corps-line', c.does));
+      card.appendChild(el('p', 'wf-corps-line wf-corps-tab', '적재 · ' + c.tab));
+      card.appendChild(el('p', 'wf-corps-line wf-corps-no', '금지 · ' + c.cannot));
+    }
+    box.appendChild(card);
+    return card;
+  }
+
   // 오른쪽 '속성 · 게시 내역'
   function wfDetail(box, model, posts) {
     box.innerHTML = '';
@@ -3327,6 +3587,29 @@
       stats.appendChild(wfStat('채널', model.chans.filter(c => c.count > 0).length, 'chan'));
       body.appendChild(stats);
 
+      body.appendChild(el('h4', 'wf-p-h', '🥒 피클 군단 4각 · 누르면 그 피클로'));
+      const corps = el('div', 'wf-p-corps');
+      WF_CORPS.forEach(c => wfCorpsCard(corps, c, true));
+      body.appendChild(corps);
+
+      body.appendChild(el('h4', 'wf-p-h', '⛔ 금지 흐름 · ' + WF_BANS.length + '건'));
+      const bans = el('div', 'wf-p-bans');
+      WF_BANS.forEach(b => {
+        const row = el('div', 'wf-ban-row');
+        row.appendChild(el('b', '', b.what));
+        const who = b.who.map(id => {
+          const m = wfBotMeta(model, id);
+          return m ? (m.emoji + ' ' + m.name) : id;
+        });
+        row.appendChild(el('i', '', '금지 ' + who.join(' · ')));
+        row.appendChild(el('span', '', '담당 ' + b.owner));
+        bans.appendChild(row);
+      });
+      body.appendChild(bans);
+
+      body.appendChild(el('h4', 'wf-p-h', '🗂️ 기록 적재 흐름'));
+      body.appendChild(el('p', 'wf-p-flow', WF_RECORD_FLOW));
+
       const topChans = model.chans.filter(c => c.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
       if (topChans.length) {
         body.appendChild(el('h4', 'wf-p-h', '많이 올린 채널'));
@@ -3353,13 +3636,27 @@
     t.appendChild(el('b', '', (item && item.name) || ref.id));
     let line = '';
     if (ref.kind === 'bot') line = ((item && item.lead) ? '사단장' : (item && item.zone === 'a' ? 'A사단' : item && item.zone === 'b' ? 'B사단' : '새로 합류')) + ' · 게시 ' + posts.filter(p => p.botId === ref.id).length + '건';
-    else if (ref.kind === 'chan') line = ((WF_HUB_BY_ID[(item && item.hub) || ''] || {}).name || '') + ' · 게시 ' + posts.filter(p => p.channelId === ref.id).length + '건';
+    else if (ref.kind === 'chan') {
+      const ch = WF_CHAN_BY_ID[(item && item.id) || ref.id] || {};
+      line = ((WF_HUB_BY_ID[(item && item.hub) || ''] || {}).name || '')
+        + (ch.owner ? ' · 담당 ' + ch.owner : '')
+        + ' · 게시 ' + posts.filter(p => p.channelId === ref.id).length + '건';
+    }
     else line = '게시 ' + posts.filter(p => p.hubId === ref.id).length + '건';
     t.appendChild(el('i', '', line));
     id.appendChild(t);
     body.appendChild(id);
 
     wfConnRow(body, model, ref);
+
+    if (ref.kind === 'chan') wfChanMapCard(body, WF_CHAN_BY_ID[ref.id] || item);
+    if (ref.kind === 'bot') {
+      const corps = WF_CORPS.find(x => x.id === ref.id);
+      if (corps) {
+        body.appendChild(el('h4', 'wf-p-h', '피클 군단 ' + corps.tag + '각'));
+        wfCorpsCard(body, corps);
+      }
+    }
 
     if (ref.kind === 'bot') {
       const own = posts.filter(p => p.botId === ref.id);
@@ -3623,7 +3920,7 @@
     const summary = posts.length + '건 · 봇 ' + nBot + ' · 채널 ' + nChan;
     if (sub) sub.textContent = summary + (state.wf.q ? ' · “' + state.wf.q + '”' : '');
     const head = $('#chatSub');
-    if (head && state.view === 'workflow') head.textContent = '누가 · 어디에 · 무엇을 올렸는지 — 시트 기록에서 자동으로';
+    if (head && state.view === 'workflow') head.textContent = '24개 채널 · 누가 · 어디에 · 무엇을 올렸는지 — 시트 기록에서 자동으로';
 
     canvas.innerHTML = '';
     canvas.style.width = L.w + 'px';

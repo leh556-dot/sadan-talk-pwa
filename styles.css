@@ -994,6 +994,10 @@ svg { display: block; }
 .wf-node.wf-zero { opacity: .66; }
 .wf-node.wf-zero.dim { opacity: .16; }
 .wf-node.wf-zero .wf-badge { background: var(--wf-soft); color: #97A2B2; }
+.wf-node.wf-ban { border-style: dashed; border-color: #E7B4AE; background: #FFF9F8; }
+.wf-node.wf-ban .wf-name { color: #9E3428; }
+.wf-node.wf-ban .wf-sub { color: #C4675C; }
+.wf-node.wf-ban .wf-bar { background: #D6604F; }
 
 /* 상단 컬러 헤더 바 */
 .wf-bar { position: absolute; left: 10px; right: 10px; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: var(--wf-accent); }
@@ -1128,6 +1132,55 @@ svg { display: block; }
 .wf-tag.wf-plain { background: transparent; border: 1px dashed var(--wf-line); color: #9AA5B5; }
 .wf-p-empty { font-size: 11px; color: var(--wf-sub); line-height: 1.5; margin: 2px 0; }
 .wf-p-more { font-size: 10.5px; color: var(--wf-sub); text-align: center; padding: 4px 0; margin: 0; }
+
+/* ── 담당 지도 카드 (채널 하나) ── */
+.wf-p-map {
+  display: flex; flex-direction: column; gap: 5px; padding: 10px 11px;
+  background: #F8FAFC; border: 1px solid var(--wf-line-2); border-radius: 11px;
+}
+.wf-p-map.wf-map-ban { background: #FFF7F6; border-color: #F2D2CC; }
+.wf-map-row { display: flex; gap: 7px; align-items: baseline; }
+.wf-map-row i {
+  flex: none; width: 30px; font-style: normal; font-size: 9.5px; font-weight: 900;
+  letter-spacing: .02em; color: #9AA5B5;
+}
+.wf-map-row b { flex: 1; min-width: 0; font-size: 11px; font-weight: 700; color: #414C60; line-height: 1.45; word-break: keep-all; }
+.wf-map-row.bad b { color: #B42318; }
+
+/* ── 피클 군단 4각 ── */
+.wf-p-corps { display: flex; flex-direction: column; gap: 5px; }
+.wf-corps-card {
+  display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 10px; background: var(--wf-card);
+  border: 1px solid var(--wf-line);
+}
+.wf-corps-card:hover { border-color: #9ED9B9; background: #FBFFFC; }
+.wf-corps-head { display: flex; align-items: center; gap: 7px; }
+.wf-corps-tag {
+  flex: none; width: 19px; height: 19px; border-radius: 6px; display: grid; place-items: center;
+  font-size: 10px; font-weight: 900; color: #fff; background: #2E9E5B;
+}
+.wf-corps-tit { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wf-corps-tit b { font-size: 12px; font-weight: 800; color: var(--wf-ink); line-height: 1.2; }
+.wf-corps-tit i { font-style: normal; font-size: 9.5px; font-weight: 600; color: var(--wf-sub); }
+.wf-corps-line { margin: 0; font-size: 10.5px; line-height: 1.5; color: #4B5563; word-break: keep-all; }
+.wf-corps-line.wf-corps-tab { color: #0E7490; }
+.wf-corps-line.wf-corps-no { color: #B42318; }
+
+/* ── 금지 흐름 · 적재 흐름 ── */
+.wf-p-bans { display: flex; flex-direction: column; gap: 4px; }
+.wf-ban-row {
+  display: flex; flex-direction: column; gap: 1px; padding: 6px 9px;
+  background: #FFF7F6; border: 1px solid #F5DAD5; border-radius: 9px;
+}
+.wf-ban-row b { font-size: 11px; font-weight: 800; color: #9E3428; line-height: 1.35; }
+.wf-ban-row i { font-style: normal; font-size: 9.5px; font-weight: 700; color: #C4675C; line-height: 1.4; }
+.wf-ban-row span { font-size: 9.5px; font-weight: 800; color: #0E9F5C; }
+.wf-p-flow {
+  margin: 0; padding: 9px 10px; border-radius: 10px; background: #F8FAFC;
+  border: 1px solid var(--wf-line-2); font-size: 10.5px; line-height: 1.6; color: #414C60;
+  word-break: keep-all;
+}
 
 /* ── 좁은 화면: 캔버스는 그대로, 속성 패널은 아래 시트 ── */
 @media (max-width: 1179px) {
