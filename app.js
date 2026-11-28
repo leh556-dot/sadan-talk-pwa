@@ -2678,7 +2678,7 @@
       hosts: ['hoohra.tistory.com'], keys: ['타로 티스토리', 'hoohra'],
       loose: [], fam: 'tistory', ban: true,
       owner: '아무도 안 건드림', account: 'hoohra',
-      status: '한도·상태: 건들지 마 (#89) · 애드센스 승인됨',
+      status: '건들지 마 (#89) · 애드센스 승인됨 · 타로 유입 99%는 인스타 DM',
       forbid: '라운 명시 지시가 있을 때만 그 건에 한해 (#89)' },
     { id: 'wordpress', no: 5, name: '워드프레스', emoji: '🌐', hub: 'blog', color: '#21759B',
       hosts: ['lifetopic.ct.ws'], keys: ['워드프레스', 'lifetopic'], loose: [],
