@@ -2309,7 +2309,7 @@
     { what: '네이버 클립', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl'], owner: '안 함 (#96 · 쇼츠·틱톡·인스타 3곳만)' },
     { what: 'Gumroad 가격 변경', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'bmuse'], owner: '라운 승인 후 실행' },
     { what: 'Adobe Stock 업로드', who: ['a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'bmuse', 'pklb'], owner: '라운 직접' },
-    { what: '당근 자동화·다계정·봇', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'pklb'], owner: '수동만 (약관 제17조③)' }
+    { what: '당근 자동화·다계정·봇', who: ['muse', 'a.pkl', 'b.pkl', 'c.pkl', 'd.pkl', 'pklb'], owner: '수동만 (약관 제17조②)' }
   ];
 
   const mapChannelsOf = (pid) => MAP_CHANNELS.filter(c => (c.who || []).indexOf(pid) >= 0);
